@@ -48,6 +48,7 @@ npm install
 npm run dev      # http://localhost:5173
 npm test         # the rules, and bots playing whole matches
 npm run build
+npm run deploy   # publish
 ```
 
-Pushing to `main` publishes it to GitHub Pages (`.github/workflows/pages.yml`).
+`npm run deploy` tests, builds and publishes it to GitHub Pages (the `gh-pages` branch).
