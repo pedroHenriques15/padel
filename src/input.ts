@@ -1,24 +1,27 @@
 // The keyboard. Presses are counted, so a quick tap between two ticks (or two network messages)
 // is never lost: the host compares counts.
+import type { Controls } from './sim/controls.ts';
+import type { SwingKind } from './sim/types.ts';
+
 const LEFT = ['ArrowLeft', 'KeyA'];
 const RIGHT = ['ArrowRight', 'KeyD'];
 const UP = ['ArrowUp', 'KeyW'];
 const DOWN = ['ArrowDown', 'KeyS'];
 const HIT = ['Space', 'KeyJ'];
-const LOB = ['KeyK', 'KeyL'];
-const GAME_KEYS = new Set([...LEFT, ...RIGHT, ...UP, ...DOWN, ...HIT, ...LOB]);
-
-export interface Controls {
-  ix: number;
-  iy: number;
-  h: number; // hit presses so far
-  l: number; // lob presses so far
-}
+const LOB = ['KeyK'];
+const DIVE = ['ShiftLeft', 'ShiftRight', 'KeyL'];
+const EMOTES = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Numpad1', 'Numpad2', 'Numpad3', 'Numpad4'];
+const GAME_KEYS = new Set([...LEFT, ...RIGHT, ...UP, ...DOWN, ...HIT, ...LOB, ...DIVE, ...EMOTES]);
 
 export class Keyboard {
   private down = new Set<string>();
   hits = 0;
   lobs = 0;
+  dives = 0;
+  emotes = 0;
+  emote = 0;
+  pressedAt = 0; // when the hit or lob key last went down
+  pressedKind: SwingKind = 'drive';
   enabled = false;
 
   constructor() {
@@ -27,8 +30,17 @@ export class Keyboard {
       if (!GAME_KEYS.has(e.code)) return;
       e.preventDefault();
       if (!e.repeat) {
-        if (HIT.includes(e.code)) this.hits++;
-        if (LOB.includes(e.code)) this.lobs++;
+        if (HIT.includes(e.code) || LOB.includes(e.code)) {
+          if (HIT.includes(e.code)) this.hits++;
+          else this.lobs++;
+          this.pressedAt = performance.now();
+          this.pressedKind = HIT.includes(e.code) ? 'drive' : 'lob';
+        }
+        if (DIVE.includes(e.code)) this.dives++;
+        if (EMOTES.includes(e.code)) {
+          this.emotes++;
+          this.emote = (EMOTES.indexOf(e.code) % 4) + 1;
+        }
       }
       this.down.add(e.code);
     });
@@ -40,12 +52,22 @@ export class Keyboard {
     return codes.some((c) => this.down.has(c));
   }
 
+  // The kind of the latest press, while its key is still down.
+  held(): SwingKind | null {
+    return this.any(this.pressedKind === 'lob' ? LOB : HIT) ? this.pressedKind : null;
+  }
+
   read(): Controls {
     return {
       ix: (this.any(RIGHT) ? 1 : 0) - (this.any(LEFT) ? 1 : 0),
       iy: (this.any(UP) ? 1 : 0) - (this.any(DOWN) ? 1 : 0),
       h: this.hits,
+      hd: this.any(HIT),
       l: this.lobs,
+      ld: this.any(LOB),
+      d: this.dives,
+      e: this.emotes,
+      ek: this.emote,
     };
   }
 }

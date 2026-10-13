@@ -1,10 +1,10 @@
 // Rooms over WebRTC (PeerJS). Whoever creates the room is the host: their browser runs the match
 // and sends everyone a View 30 times a second; the others send their keys.
 import Peer, { type DataConnection } from 'peerjs';
-import type { Controls } from './input.ts';
 import { DT } from './sim/constants.ts';
-import { newMatch, step, toView } from './sim/sim.ts';
-import type { Seat, State, Team, TickInput, View } from './sim/types.ts';
+import { cleanControls, edges, noControls, seenOf, type Controls, type Seen } from './sim/controls.ts';
+import { FORMATS, newMatch, step, toView } from './sim/sim.ts';
+import type { Difficulty, FormatKey, Seat, State, Team, TickInput, View } from './sim/types.ts';
 
 const PREFIX = 'padel-pk26-';
 const ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
@@ -27,7 +27,8 @@ export interface Member {
 export interface Lobby {
   code: string;
   mode: Mode;
-  gamesToWin: number;
+  format: FormatKey;
+  difficulty: Difficulty;
   soloAssist: boolean;
   members: Member[];
   seats: Partial<Record<SeatKey, string>>; // member ids
@@ -74,6 +75,13 @@ function openPeer(id?: string): Promise<Peer> {
 
 const errType = (e: unknown) => (e as { type?: string })?.type ?? '';
 
+// ?lag=150 delays a player's messages both ways by that many ms in all, to try a far-away host.
+const LAG = typeof location === 'undefined' ? 0 : Number(new URLSearchParams(location.search).get('lag')) || 0;
+const later = (f: () => void): void => {
+  if (LAG > 0) setTimeout(f, LAG / 2);
+  else f();
+};
+
 // Tick about 60 times a second from a worker: a background tab throttles its own timers, not a
 // worker's, so the match goes on if the host switches tabs.
 function ticker(fn: () => void): () => void {
@@ -93,7 +101,7 @@ interface Remote {
   heard: number;
   name: string;
   ctl: Controls;
-  seen: { h: number; l: number };
+  seen: Seen;
 }
 
 export class HostSession {
@@ -102,7 +110,7 @@ export class HostSession {
   state: State | null = null;
   onChange: () => void = () => {};
   private remotes = new Map<string, Remote>();
-  private localSeen = { h: 0, l: 0 };
+  private localSeen: Seen = seenOf(noControls());
   private stopTicker: (() => void) | null = null;
   private watchdog: ReturnType<typeof setInterval>;
   private acc = 0;
@@ -114,7 +122,7 @@ export class HostSession {
   private constructor(peer: Peer, code: string, name: string, readKeys: () => Controls) {
     this.peer = peer;
     this.readKeys = readKeys;
-    this.lobby = { code, mode: '2v2', gamesToWin: 3, soloAssist: true, members: [{ id: HOST_ID, name }], seats: { A0: HOST_ID }, playing: false };
+    this.lobby = { code, mode: '2v2', format: 'g3', difficulty: 'normal', soloAssist: true, members: [{ id: HOST_ID, name }], seats: { A0: HOST_ID }, playing: false };
     peer.on('connection', (c) => this.accept(c));
     this.watchdog = setInterval(() => {
       for (const [id, r] of this.remotes) {
@@ -161,7 +169,7 @@ export class HostSession {
         return;
       }
       const name = cleanName(m.name);
-      this.remotes.set(c.peer, { conn: c, heard: performance.now(), name, ctl: { ix: 0, iy: 0, h: 0, l: 0 }, seen: { h: 0, l: 0 } });
+      this.remotes.set(c.peer, { conn: c, heard: performance.now(), name, ctl: noControls(), seen: seenOf(noControls()) });
       this.lobby.members.push({ id: c.peer, name });
       if (!this.lobby.playing) {
         const free = MODE_SEATS[this.lobby.mode].find((k) => !this.lobby.seats[k]);
@@ -171,8 +179,7 @@ export class HostSession {
     } else if (m.t === 'sit' && r) {
       this.sit(c.peer, m.seat);
     } else if (m.t === 'in' && r) {
-      const n = (v: unknown, lo: number, hi: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : 0);
-      r.ctl = { ix: n(m.ix, -1, 1), iy: n(m.iy, -1, 1), h: n(m.h, 0, 1e9), l: n(m.l, 0, 1e9) };
+      r.ctl = cleanControls(m as unknown as Record<string, unknown>);
     }
   }
 
@@ -197,8 +204,10 @@ export class HostSession {
     this.changed();
   }
 
-  configure(c: Partial<Pick<Lobby, 'mode' | 'gamesToWin' | 'soloAssist'>>): void {
+  configure(c: Partial<Pick<Lobby, 'mode' | 'format' | 'difficulty' | 'soloAssist'>>): void {
     if (this.lobby.playing) return;
+    if (c.format && !(c.format in FORMATS)) return;
+    if (c.difficulty && !['easy', 'normal', 'hard'].includes(c.difficulty)) return;
     Object.assign(this.lobby, c);
     // Someone in a seat the new mode drops moves to a free one.
     const active = MODE_SEATS[this.lobby.mode];
@@ -219,10 +228,11 @@ export class HostSession {
       const slot = k[1] === '0' ? 0 : 1;
       return member ? { id: member.id, name: member.name, team, slot, bot: false } : { id: `bot-${k}`, name: `Bot ${k}`, team, slot, bot: true };
     });
-    this.state = newMatch({ gamesToWin: this.lobby.gamesToWin, soloAssist: this.lobby.soloAssist, seats });
+    const { format, difficulty, soloAssist } = this.lobby;
+    this.state = newMatch({ format, difficulty, soloAssist, seats });
     this.lobby.playing = true;
-    this.localSeen = { ...this.localSeen, ...this.readKeys() };
-    for (const r of this.remotes.values()) r.seen = { h: r.ctl.h, l: r.ctl.l };
+    this.localSeen = seenOf(this.readKeys());
+    for (const r of this.remotes.values()) r.seen = seenOf(r.ctl);
     this.last = performance.now();
     this.acc = 0;
     this.stopTicker?.();
@@ -266,15 +276,6 @@ export class HostSession {
   }
 }
 
-// One tick's input from running counts: a press since the last tick is a hit.
-function edges(c: Controls, seen: { h: number; l: number }): TickInput {
-  const hit = c.h > seen.h;
-  const lob = c.l > seen.l;
-  seen.h = c.h;
-  seen.l = c.l;
-  return { ix: c.ix, iy: c.iy, hit, lob };
-}
-
 const INTERP_MS = 80;
 
 export class ClientSession {
@@ -283,7 +284,7 @@ export class ClientSession {
   onChange: () => void = () => {};
   onClose: (why: string) => void = () => {};
   private views: { at: number; v: View }[] = [];
-  private sent = { ix: 0, iy: 0, h: 0, l: 0, at: 0 };
+  private sent = { key: '', at: 0 };
   private closed = false;
   private peer: Peer;
   private conn: DataConnection;
@@ -295,7 +296,7 @@ export class ClientSession {
     this.pinger = setInterval(() => {
       if (conn.open) void conn.send({ t: 'ping' } satisfies ToHost);
     }, PING_MS);
-    conn.on('data', (raw) => this.receive(raw as ToClient));
+    conn.on('data', (raw) => later(() => this.receive(raw as ToClient)));
     conn.on('close', () => this.close('The host closed the room.'));
     conn.on('error', () => this.close('Lost the connection to the host.'));
     peer.on('error', (e) => {
@@ -345,25 +346,24 @@ export class ClientSession {
     void this.conn.send({ t: 'sit', seat } satisfies ToHost);
   }
 
-  // Sends the keys when they change, and twice a second anyway.
+  // Sends the keys (and where the player is) when they change, and twice a second anyway.
   sendControls(c: Controls): void {
     const now = performance.now();
-    const s = this.sent;
-    if (c.ix === s.ix && c.iy === s.iy && c.h === s.h && c.l === s.l && now - s.at < 500) return;
-    this.sent = { ...c, at: now };
-    if (this.conn.open) void this.conn.send({ t: 'in', ...c } satisfies ToHost);
+    const key = JSON.stringify(c);
+    if (key === this.sent.key && now - this.sent.at < 500) return;
+    this.sent = { key, at: now };
+    later(() => {
+      if (this.conn.open) void this.conn.send({ t: 'in', ...c } satisfies ToHost);
+    });
   }
 
-  // The view a little in the past, between the two snapshots around it, so motion is smooth. The
-  // player's own figure is the newest, so moving feels quicker.
+  // The latest view from the host, as it came.
+  newest(): View | null {
+    return this.views.at(-1)?.v ?? null;
+  }
+
+  // The view a little in the past, between the two snapshots around it, so motion is smooth.
   view(): View | null {
-    const v = this.smoothed();
-    const newest = this.views.at(-1)?.v.players.find((p) => p.id === this.you);
-    if (v && newest) v.players = v.players.map((p) => (p.id === this.you ? { ...p, x: newest.x, y: newest.y } : p));
-    return v;
-  }
-
-  private smoothed(): View | null {
     const vs = this.views;
     if (vs.length === 0) return null;
     const at = performance.now() - INTERP_MS;
