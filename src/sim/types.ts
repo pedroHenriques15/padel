@@ -14,7 +14,8 @@ export interface Pose {
 }
 
 // One tick of a player's controls. ix is right (+) / left (-) on their screen, iy towards the
-// net (+) / away from it (-). The presses are true on the tick the key went down.
+// net (+) / away from it (-): where they run. aim is the same for where they aim (the arrows).
+// The presses are true on the tick the key went down.
 export interface TickInput {
   ix: number;
   iy: number;
@@ -26,7 +27,7 @@ export interface TickInput {
   emote: number; // 1-4 on the tick one was pressed, else 0
   pose?: Pose;
   serveAim?: { x: number; y: number }; // where a remote player or a bot aims their serve
-  shotAim?: [number, number]; // a bot's arrows at contact, without moving
+  aim?: [number, number];
 }
 
 export interface Seat {

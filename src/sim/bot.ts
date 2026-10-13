@@ -190,9 +190,9 @@ function decide(s: State, p: Player, pl: Plan | null, L: Level): TickInput {
   // The ball is here and they aren't charging: a quick swing.
   if (rally && p.charge < 0 && p.cooldown <= 0 && hittableDistance(s, p) <= p.reach * 0.95) {
     const lob = wantsLob(s, p, L, s.ball.z);
-    return { ...IDLE, press: !lob, lobPress: lob, shotAim: aimFor(s, p, L) };
+    return { ...IDLE, press: !lob, lobPress: lob, aim: aimFor(s, p, L) };
   }
-  const holding: TickInput = { ...IDLE, hold: p.chargeKind === 'drive', lobHold: p.chargeKind === 'lob', shotAim: aimFor(s, p, L) };
+  const holding: TickInput = { ...IDLE, hold: p.chargeKind === 'drive', lobHold: p.chargeKind === 'lob', aim: aimFor(s, p, L) };
   if (rally && s.lastHitTeam !== p.team && s.sinceHit < L.reaction) return p.charge >= 0 ? holding : IDLE;
 
   // Bots aim to stand a little off the ideal spot, differently for each shot, so they miss too;
@@ -213,7 +213,7 @@ function decide(s: State, p: Player, pl: Plan | null, L: Level): TickInput {
   if (p.charge < 0 && p.cooldown <= 0 && pl.pt.t <= power * CHARGE_FULL + 0.05 && (d < 0.6 || pl.pt.t < 0.15)) {
     Object.assign(inp, { press: !lob, hold: !lob, lobPress: lob, lobHold: lob });
   }
-  inp.shotAim = aimFor(s, p, L);
+  inp.aim = aimFor(s, p, L);
   // A dive for a ball they can't run to.
   if (L.dive && pl.late > 0.06 && pl.pt.t < 0.35 && d > p.reach && d < 2.4 && p.diveCd <= 0) inp.dive = true;
   return inp;

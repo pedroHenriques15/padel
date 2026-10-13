@@ -218,8 +218,8 @@ function control(s: State, p: Player, inp: TickInput, dt: number): void {
     p.emote = inp.emote;
     p.emoteT = C.EMOTE_TIME;
   }
-  p.aimIx = inp.shotAim ? inp.shotAim[0] : Math.sign(inp.ix);
-  p.aimIy = inp.shotAim ? inp.shotAim[1] : Math.sign(inp.iy);
+  p.aimIx = Math.sign(inp.aim?.[0] ?? 0);
+  p.aimIy = Math.sign(inp.aim?.[1] ?? 0);
 
   const serving = s.phase === 'serve' && s.players[s.server] === p;
   const limits: Limits = { team: p.team, serveSide: serving ? s.serveSide : 0, frozen: p.charge >= 0, speed: p.speed };
@@ -266,8 +266,8 @@ function serveControl(s: State, p: Player, inp: TickInput, dt: number): void {
     p.aimX = inp.serveAim.x;
     p.aimY = inp.serveAim.y;
   } else if (!inp.pose) {
-    p.aimX += Math.sign(inp.ix) * rightX(T) * C.AIM_SPEED * dt;
-    p.aimY += Math.sign(inp.iy) * fwd(T) * C.AIM_SPEED * dt;
+    p.aimX += p.aimIx * rightX(T) * C.AIM_SPEED * dt;
+    p.aimY += p.aimIy * fwd(T) * C.AIM_SPEED * dt;
   }
   const a = clampServeAim(p.aimX, p.aimY, s.boxSign, R);
   p.aimX = a.x;

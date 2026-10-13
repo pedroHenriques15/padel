@@ -53,8 +53,8 @@ export class Me {
     moveBody(this.body, c.ix, c.iy, dive, { team: p.team, serveSide: this.serving ? v.serveSide : 0, frozen: charging, speed: p.speed }, dt);
     if (this.serving && charging) {
       this.aim = clampServeAim(
-        this.aim.x + c.ix * rightX(p.team) * C.AIM_SPEED * dt,
-        this.aim.y + c.iy * fwd(p.team) * C.AIM_SPEED * dt,
+        this.aim.x + c.tx * rightX(p.team) * C.AIM_SPEED * dt,
+        this.aim.y + c.ty * fwd(p.team) * C.AIM_SPEED * dt,
         v.boxSign,
         R,
       );

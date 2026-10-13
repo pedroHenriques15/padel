@@ -15,17 +15,17 @@ A throwaway game: no server, no accounts, nothing to maintain.
 
 | Key | |
 |---|---|
-| WASD or arrows | Move. You always play up the screen. The ring round your feet lights up when the ball is in reach. |
-| Hold Space (or J) | Charge a shot: the longer, the harder. Let go to swing, or keep holding and you swing by yourself as the ball arrives. Charging plants your feet: you stop, and the arrows only aim. A tap is the safe shot. |
-| Arrows as you hit | Aim: ←/→ the side, ↑ deep, ↓ short; none, crosscourt. The target shows while you charge. |
-| K | Lob (hold it for a higher one) |
-| Shift or L | Dive towards the arrows, for a ball out of reach; you're down for a moment after |
+| WASD | Move. You always play up the screen. The ring round your feet lights up when the ball is in reach. |
+| Arrows | Aim, and nothing else: ←/→ the side, ↑ deep, ↓ short, as you hit; none, crosscourt. The target shows while you charge. |
+| Hold Space (or J) | Charge a shot: the longer, the harder. Let go to swing, or keep holding and you swing by yourself as the ball arrives. Charging plants your feet. A tap is the safe shot. |
+| E (or K) | Lob (hold it for a higher one) |
+| Shift (or L) | Dive the way you run, for a ball out of reach; you're down for a moment after |
 | 1 to 4 | Vamos!, 😂, Sorry!, 👏 |
 | M | Sound on/off |
 
-**Serving:** walk along the baseline with ←/→, then hold Space: the power bar fills, and its red
+**Serving:** walk along the baseline with A/D, then hold Space: the power bar fills, and its red
 top risks a fault. The arrows move your target in the box: the T, the body, or wide into the
-glass. Let go to serve. K serves a slice, which stays low after the bounce.
+glass. Let go to serve. E (or K) serves a slice, which stays low after the bounce.
 
 **Overheads:** on a high ball, a tap is a bandeja (safe, deep), a charge a smash, and a full
 charge from near the net a *por tres*: it bounces out of the court, a winner unless they get to

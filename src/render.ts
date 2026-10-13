@@ -557,7 +557,7 @@ export class Renderer {
       const mine = v.serverId === o.me;
       const left = Math.ceil(AUTO_SERVE - v.timer);
       if (mine) {
-        const how = left <= 3 ? `Serving by itself in ${left}…` : '←/→ walk · hold Space for power (K: slice) · arrows aim · let go';
+        const how = left <= 3 ? `Serving by itself in ${left}…` : 'A/D walk · hold Space for power (E: slice) · arrows aim · let go';
         banner(ctx, v.message ? `Your serve · ${v.message}` : 'Your serve', how, '#ffffff');
       } else if (v.message) banner(ctx, v.message, '', '#ffe14d');
     }

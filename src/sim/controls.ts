@@ -3,8 +3,10 @@
 import type { TickInput } from './types.ts';
 
 export interface Controls {
-  ix: number;
+  ix: number; // running: WASD
   iy: number;
+  tx: number; // aiming: the arrows
+  ty: number;
   h: number; // hit presses so far
   hd: boolean; // hit held
   l: number; // lob presses
@@ -21,7 +23,7 @@ export interface Controls {
 
 export type Seen = { h: number; l: number; d: number; e: number };
 
-export const noControls = (): Controls => ({ ix: 0, iy: 0, h: 0, hd: false, l: 0, ld: false, d: 0, e: 0, ek: 0 });
+export const noControls = (): Controls => ({ ix: 0, iy: 0, tx: 0, ty: 0, h: 0, hd: false, l: 0, ld: false, d: 0, e: 0, ek: 0 });
 export const seenOf = (c: Controls): Seen => ({ h: c.h, l: c.l, d: c.d, e: c.e });
 
 // One tick's input from running counts: a press since the last tick is a press.
@@ -29,6 +31,7 @@ export function edges(c: Controls, seen: Seen): TickInput {
   const inp: TickInput = {
     ix: c.ix,
     iy: c.iy,
+    aim: [c.tx, c.ty],
     hold: c.hd,
     press: c.h > seen.h,
     lobHold: c.ld,
@@ -51,6 +54,8 @@ export function cleanControls(m: Record<string, unknown>): Controls {
   const c: Controls = {
     ix: Math.sign(n(m.ix, -1, 1)),
     iy: Math.sign(n(m.iy, -1, 1)),
+    tx: Math.sign(n(m.tx, -1, 1)),
+    ty: Math.sign(n(m.ty, -1, 1)),
     h: n(m.h, 0, 1e9),
     hd: m.hd === true,
     l: n(m.l, 0, 1e9),

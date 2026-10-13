@@ -146,12 +146,12 @@ function howTo(): HTMLElement {
     h(
       'ul',
       {},
-      h('li', {}, h('b', {}, 'Move'), ' WASD or the arrows. You always play up the screen. The ring round your feet lights up when the ball is in reach.'),
-      h('li', {}, h('b', {}, 'Serve'), ' Walk along the baseline with ←/→, then hold Space: the power bar fills (the red top risks a fault) and the arrows move your target in the box. Let go to serve. K serves a slice, which stays low.'),
-      h('li', {}, h('b', {}, 'Hit'), ' Hold Space as the ball comes: the longer, the harder. Let go to swing, or keep holding and you swing by yourself as it arrives. Charging plants your feet: you stop, and the arrows only aim, so get to the ball first. A quick tap is the safe shot; the closer the ball passes, the better.'),
-      h('li', {}, h('b', {}, 'Aim'), ' The arrows as you hit: ←/→ the side, ↑ deep, ↓ short. With none, it goes crosscourt. Your target shows on the other side while you charge.'),
+      h('li', {}, h('b', {}, 'Move'), ' WASD. You always play up the screen. The ring round your feet lights up when the ball is in reach.'),
+      h('li', {}, h('b', {}, 'Aim'), ' The arrows, which only aim: ←/→ the side, ↑ deep, ↓ short, as you hit. With none, it goes crosscourt. Your target shows on the other side while you charge.'),
+      h('li', {}, h('b', {}, 'Serve'), ' Walk along the baseline with A/D, then hold Space: the power bar fills (the red top risks a fault) and the arrows move your target in the box. Let go to serve. E (or K) serves a slice, which stays low.'),
+      h('li', {}, h('b', {}, 'Hit'), ' Hold Space as the ball comes: the longer, the harder. Let go to swing, or keep holding and you swing by yourself as it arrives. Charging plants your feet, so get to the ball first. A quick tap is the safe shot; the closer the ball passes, the better.'),
       h('li', {}, h('b', {}, 'Overheads'), ' A high ball: tap for a bandeja, charge for a smash; fully charged from near the net it bounces out of the court: por tres!'),
-      h('li', {}, h('b', {}, 'Lob, dive, emotes'), ' K lobs (hold it for a higher one). Shift or L dives towards the arrows, for a ball out of reach. 1 to 4: Vamos!, 😂, Sorry!, 👏'),
+      h('li', {}, h('b', {}, 'Lob, dive, emotes'), ' E (or K) lobs; hold it for a higher one. Shift (or L) dives the way you run, for a ball out of reach. 1 to 4: Vamos!, 😂, Sorry!, 👏'),
       h('li', {}, h('b', {}, 'Rules'), ' Serve underhand, diagonally, into the box; a serve that clips the net and lands in is a let. The ball must bounce once in the other half before it touches a wall; after that it can come off the glass, and you play it before it bounces twice. Golden point at 40-40.'),
       h('li', {}, h('b', {}, 'Sound'), ' M mutes.'),
     ),
@@ -234,7 +234,7 @@ function gameBar(lobby: Lobby): HTMLElement {
     'div',
     { class: 'bar' },
     h('span', {}, 'Room ', h('b', {}, lobby.code)),
-    h('span', { class: 'keys' }, 'Hold Space: charge · arrows aim · K lob · Shift dive · 1-4 emotes'),
+    h('span', { class: 'keys' }, 'WASD move · arrows aim · hold Space: charge · E lob · Shift dive · 1-4 emotes'),
     mute,
     h('button', { class: 'small ghost', onclick: leave }, 'Leave'),
   );
@@ -345,7 +345,7 @@ function overlay(v: View, id: string, charge: number, lob: boolean): Overlay | u
     else {
       // An overhead only once a high ball is close; until then, the shot it will most likely be.
       const near = Math.hypot(b.x - p.x, b.y - p.y) < 2.5;
-      target = shotTarget(p.team, c.ix, c.iy, b.x, shotKind(lob ? 'lob' : 'drive', charge, near ? b.z : 0, p.y));
+      target = shotTarget(p.team, c.tx, c.ty, b.x, shotKind(lob ? 'lob' : 'drive', charge, near ? b.z : 0, p.y));
     }
   }
   const reachable =

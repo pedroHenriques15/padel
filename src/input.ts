@@ -3,15 +3,20 @@
 import type { Controls } from './sim/controls.ts';
 import type { SwingKind } from './sim/types.ts';
 
-const LEFT = ['ArrowLeft', 'KeyA'];
-const RIGHT = ['ArrowRight', 'KeyD'];
-const UP = ['ArrowUp', 'KeyW'];
-const DOWN = ['ArrowDown', 'KeyS'];
+// WASD runs; the arrows only aim.
+const LEFT = ['KeyA'];
+const RIGHT = ['KeyD'];
+const UP = ['KeyW'];
+const DOWN = ['KeyS'];
+const AIM_LEFT = ['ArrowLeft'];
+const AIM_RIGHT = ['ArrowRight'];
+const AIM_UP = ['ArrowUp'];
+const AIM_DOWN = ['ArrowDown'];
 const HIT = ['Space', 'KeyJ'];
-const LOB = ['KeyK'];
+const LOB = ['KeyE', 'KeyK'];
 const DIVE = ['ShiftLeft', 'ShiftRight', 'KeyL'];
 const EMOTES = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Numpad1', 'Numpad2', 'Numpad3', 'Numpad4'];
-const GAME_KEYS = new Set([...LEFT, ...RIGHT, ...UP, ...DOWN, ...HIT, ...LOB, ...DIVE, ...EMOTES]);
+const GAME_KEYS = new Set([...LEFT, ...RIGHT, ...UP, ...DOWN, ...AIM_LEFT, ...AIM_RIGHT, ...AIM_UP, ...AIM_DOWN, ...HIT, ...LOB, ...DIVE, ...EMOTES]);
 
 export class Keyboard {
   private down = new Set<string>();
@@ -61,6 +66,8 @@ export class Keyboard {
     return {
       ix: (this.any(RIGHT) ? 1 : 0) - (this.any(LEFT) ? 1 : 0),
       iy: (this.any(UP) ? 1 : 0) - (this.any(DOWN) ? 1 : 0),
+      tx: (this.any(AIM_RIGHT) ? 1 : 0) - (this.any(AIM_LEFT) ? 1 : 0),
+      ty: (this.any(AIM_UP) ? 1 : 0) - (this.any(AIM_DOWN) ? 1 : 0),
       h: this.hits,
       hd: this.any(HIT),
       l: this.lobs,
