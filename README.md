@@ -51,18 +51,26 @@ Sets are six games by two, with a tie-break at 6-6.
 
 ## Code
 
-- `src/sim/`: the match (physics, rules, scoring, bots). Plain TypeScript, no browser.
-  `body.ts` (moving) and `aim.ts` (where shots go) are shared with the screen.
-- `src/session.ts`: rooms, the host and the others. `src/predict.ts`: a player's own figure.
-- `src/render.ts`: the court in perspective, on a canvas.
-- `src/main.ts`: the screens.
+- `src/sim/`: the match, plain TypeScript with no browser: the ball and the court (`court.ts`), the
+  rules, serving, shots and scoring (`sim.ts`), moving (`body.ts`) and aiming (`aim.ts`), which the
+  screen shares, the bots (`bot.ts`), and the keys as they travel (`controls.ts`).
+- `src/session.ts`: rooms, the host and the others. `src/predict.ts`: a player's own figure on
+  their own screen.
+- `src/render.ts`: the court in perspective, on a canvas. `src/main.ts`: the screens and the loop.
+  `src/input.ts`, `src/audio.ts`: the keyboard and the sounds.
+
+How it fits together, the network messages included, is in [docs/architecture.md](docs/architecture.md).
+How to tune the feel, add a shot, a key or a format, and what to watch out for is in
+[docs/making-changes.md](docs/making-changes.md). Putting a change live is in
+[docs/releasing.md](docs/releasing.md).
+
+The tests run the TypeScript straight in Node, which needs Node 22.18 or later.
 
 ```sh
 npm install
-npm run dev      # http://localhost:5173
-npm test         # the rules, and bots playing whole matches
+npm run dev      # http://localhost:5173; ?debug exposes window.__padel, ?lag=150 delays a friend
+npm test         # the rules, serving, shots, the dive, scoring; bots playing whole matches
+npm run check    # the type check (Node runs the tests without one)
 npm run build
-npm run deploy   # publish
+npm run deploy   # publish to GitHub Pages (the gh-pages branch)
 ```
-
-`npm run deploy` tests, builds and publishes it to GitHub Pages (the `gh-pages` branch).
