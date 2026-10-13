@@ -1,6 +1,7 @@
 // Bots fill the empty places. They foresee where the ball goes by running the same physics ahead,
 // run to the first place they can reach it, charge as it comes, and aim away from the other side.
 // How well they do it is the lobby's difficulty.
+import { autoTarget, DEPTHS, shotKind } from './aim.ts';
 import { CHARGE_FULL, DT, SERVE_FULL, SMASH_Z } from './constants.ts';
 import { fwd, halfSign, hittableDistance, lerp, moveBall, other, rightX, sideOf, slotX } from './court.ts';
 import type { Ball, BallEvent, Difficulty, Player, State, Team, TickInput } from './types.ts';
@@ -97,10 +98,10 @@ function serveInput(s: State, p: Player, L: Level): TickInput {
   const margin = 0.35 + (1 - L.lines) * 1.1;
   const x = s.boxSign * (where < 0.35 ? margin : where < 0.6 ? 2.5 : 5 - margin);
   const y = halfSign(other(p.team)) * (6.95 - margin - hash(s, p, 4) * 1.2);
-  const serveAim = { x, y };
-  if (p.charge < 0) return { ...IDLE, press: !slice, hold: !slice, lobPress: slice, lobHold: slice, serveAim };
+  const target = { x, y };
+  if (p.charge < 0) return { ...IDLE, press: !slice, hold: !slice, lobPress: slice, lobHold: slice, target };
   const held = p.charge / SERVE_FULL < want;
-  return { ...IDLE, hold: held && p.chargeKind === 'drive', lobHold: held && p.chargeKind === 'lob', serveAim };
+  return { ...IDLE, hold: held && p.chargeKind === 'drive', lobHold: held && p.chargeKind === 'lob', target };
 }
 
 // Which of the team takes the ball, and where: the earliest place someone can reach.
@@ -147,22 +148,31 @@ function wantedPower(s: State, p: Player, pt: Pt, L: Level): number {
   return lerp(lo, L.power[1], hash(s, p, 5));
 }
 
-// The arrows at contact: away from the other side (down the middle between two); from the net,
-// short and wide past players at the back; otherwise deep against them, and short at the feet of
-// players at the net.
-function aimFor(s: State, p: Player, L: Level): [number, number] {
+// The target: away from the other side, or down the middle between two; from the net, short and
+// wide past players at the back; otherwise deep against them, and short at the feet of players at
+// the net. Less smart bots pick a side at random, or play the automatic shot. The depth is for the
+// shot they expect to play (pl, the team's plan for the ball).
+function aimFor(s: State, p: Player, L: Level, pl: Plan | null): { x: number; y: number } {
+  const pt = pl && pl.player === p ? pl.pt : null;
+  const z = pt ? pt.z : s.ball.z;
+  const charging = p.charge >= 0;
+  const lob = charging ? p.chargeKind === 'lob' : wantsLob(s, p, L, z);
+  const power = charging ? p.charge / CHARGE_FULL : pt ? wantedPower(s, p, pt, L) : 0;
+  const shot = shotKind(lob ? 'lob' : 'drive', power, z, p.y);
+  const auto = autoTarget(p.team, p.x, shot);
+  const at = (x: number, depth: -1 | 0 | 1) => ({ x, y: -halfSign(p.team) * DEPTHS[shot][depth + 1] });
   const opp = s.players.filter((q) => q.team !== p.team);
   if (hash(s, p, 8) < L.smart) {
     const avg = opp.reduce((a, q) => a + q.x, 0) / opp.length;
     let side = Math.abs(avg) > 0.6 ? -Math.sign(avg) : hash(s, p, 9) < 0.5 ? -1 : 1;
     const angle = atNet(p) && !opp.some(atNet) && hash(s, p, 10) < 0.6;
     if (!angle && opp.length === 2 && hash(s, p, 10) < 0.3) side = 0;
-    const iy = angle || opp.every(atNet) ? -1 : hash(s, p, 11) < 0.25 ? -1 : 1;
-    return [side * rightX(p.team), iy];
+    const depth = angle || opp.every(atNet) ? -1 : hash(s, p, 11) < 0.25 ? -1 : 1;
+    return at(side * 3.3, depth);
   }
   const side = [-1, 0, 0, 1][Math.floor(hash(s, p, 9) * 4)];
   const r = hash(s, p, 11);
-  return [side * rightX(p.team), r < 0.25 ? 1 : r < 0.37 ? -1 : 0];
+  return at(side === 0 ? auto.x : side * 3.3, r < 0.25 ? 1 : r < 0.37 ? -1 : 0);
 }
 
 // Where to wait: at the net after a good shot of their own, back when lobbed, and towards the
@@ -190,9 +200,9 @@ function decide(s: State, p: Player, pl: Plan | null, L: Level): TickInput {
   // The ball is here and they aren't charging: a quick swing.
   if (rally && p.charge < 0 && p.cooldown <= 0 && hittableDistance(s, p) <= p.reach * 0.95) {
     const lob = wantsLob(s, p, L, s.ball.z);
-    return { ...IDLE, press: !lob, lobPress: lob, aim: aimFor(s, p, L) };
+    return { ...IDLE, press: !lob, lobPress: lob, target: aimFor(s, p, L, pl) };
   }
-  const holding: TickInput = { ...IDLE, hold: p.chargeKind === 'drive', lobHold: p.chargeKind === 'lob', aim: aimFor(s, p, L) };
+  const holding: TickInput = { ...IDLE, hold: p.chargeKind === 'drive', lobHold: p.chargeKind === 'lob', target: aimFor(s, p, L, pl) };
   if (rally && s.lastHitTeam !== p.team && s.sinceHit < L.reaction) return p.charge >= 0 ? holding : IDLE;
 
   // Bots aim to stand a little off the ideal spot, differently for each shot, so they miss too;
@@ -213,7 +223,7 @@ function decide(s: State, p: Player, pl: Plan | null, L: Level): TickInput {
   if (p.charge < 0 && p.cooldown <= 0 && pl.pt.t <= power * CHARGE_FULL + 0.05 && (d < 0.6 || pl.pt.t < 0.15)) {
     Object.assign(inp, { press: !lob, hold: !lob, lobPress: lob, lobHold: lob });
   }
-  inp.aim = aimFor(s, p, L);
+  inp.target = aimFor(s, p, L, pl);
   // A dive for a ball they can't run to.
   if (L.dive && pl.late > 0.06 && pl.pt.t < 0.35 && d > p.reach && d < 2.4 && p.diveCd <= 0) inp.dive = true;
   return inp;

@@ -22,24 +22,27 @@ Most of the feel is numbers in `src/sim/constants.ts`:
 | `SPEED`, `ACCEL`, `DECEL` | How fast players run, start and stop |
 | `REACH`, `MAX_Z`, `SMASH_Z` | How far they reach, how high, and from what height a ball is an overhead |
 | `SWING`, `LATE`, `COOLDOWN` | How long a swing can make contact, how late it still reaches a ball that passed, the wait between swings |
+| `AIM_SPEED` | How fast the arrows move a shot's target |
 | `CHARGE_FULL` | How long to hold for a full-power shot |
-| `SERVE_FULL`, `SERVE_RED`, `SERVE_HOLD`, `AIM_SPEED` | The serve's bar, where its red zone starts, how long it can be held, how fast the target moves |
+| `SERVE_FULL`, `SERVE_RED`, `SERVE_HOLD`, `SERVE_AIM_SPEED` | The serve's bar, where its red zone starts, how long it can be held, how fast its target moves |
 | `SERVE_DELAY`, `AUTO_SERVE`, `POINT_PAUSE` | The waits round a serve and a point |
 | `DIVE_*` | The dive: its burst, speed, time on the floor, cooldown, and longer reach |
 | `FLOOR_E`, `FLOOR_F`, `WALL_E`, `CORD` | How the ball bounces off the floor and the walls, and how near the tape it clips the net |
 
 The rest lives in code:
 
-- **The shots** are in `hit()` in `src/sim/sim.ts`: the error formula (what makes a shot scatter),
-  each shot's pace, net margin and spin, and when a contact is "Perfect!" or a frame. How deep each
-  shot lands is `DEPTHS` in `src/sim/aim.ts`, and how wide `shotTarget` in the same file.
+- **The shots** are in `hit()` in `src/sim/sim.ts`: each shot's pace, net margin and spin, and when
+  a contact is "Perfect!" or a frame.
+- **Aiming** is in `src/sim/aim.ts`: how far a shot scatters (`shotSpread`, which the screen draws
+  too), where the automatic shot goes (`autoTarget`, with the depths in `DEPTHS`), how far a target
+  can go (`clampShotAim`), and what a lob or a por tres does with it (`shotAim`).
 - **The serve** is `serve()` in `sim.ts`: the pace for the bar, and how wild the red zone makes it.
 - **Spin** is `spinBounce()` in `src/sim/court.ts`: how low a slice stays, how high a kick leaps.
 - **The bots** are `LEVELS` in `src/sim/bot.ts`, one row per difficulty.
 
 Run `npm test` and read the printed lines. Each bot match test prints the shots a point, how the
-points ended and the shots that got a name. Today they print about 7 (Easy) to 12 (Hard) shots a
-point in singles, and 8 to 13.5 with three or four players. Much longer, and points drag; much
+points ended and the shots that got a name. Today they print about 7 (Easy) to 12.5 (Hard) shots a
+point in singles, and 9 to 17 with three or four players. Much longer, and points drag; much
 shorter, and nobody rallies. The matches are seeded, so the same code always prints the same
 numbers: any change in them comes from your change. The power bar test
 prints the faults in 60 serves, green and red. The tests also guard the feel (see "The tests guard
@@ -52,13 +55,15 @@ rallies longer can make the game feel fine for bots and impossible for people. P
 
 1. **`src/sim/types.ts`**: add it to `Shot`.
 2. **`src/sim/aim.ts`**
-   - Give it depths in `DEPTHS`: short, plain and deep, in metres from the net.
+   - Give it depths in `DEPTHS`: short, plain and deep, in metres from the net. The automatic shot
+     goes to the plain one; the bots choose among the three.
    - If a swing should become it by itself (as an overhead becomes a bandeja or a smash), add the
-     rule to `shotKind`. The screen uses `shotKind` and `shotTarget` too, to draw the target, so
-     the player sees the right one.
+     rule to `shotKind`. The screen uses it too (through `likelyShot`) to place the automatic
+     target, so the player sees the right one.
+   - If it shouldn't go just where the target is (a por tres always lands short), say so in
+     `shotAim`. If it should scatter more or less than the rest, scale it in `shotSpread`.
 3. **`src/sim/sim.ts`, `hit()`**: a `case` with its pace (or a flight time), net margin, spin and the
-   name that pops up (`tag`). If it should scatter more or less than the rest, scale `err`. If it
-   counts as a smash in the stats, add it in `shotDone`.
+   name that pops up (`tag`). If it counts as a smash in the stats, add it in `shotDone`.
 4. **`src/sim/bot.ts`**: when the bots play it (`wantsLob`, `wantedPower`, `aimFor`), and where they
    stand after it (`home` reads `s.lastShot`).
 5. **`src/render.ts`**: its name's colour in `tagColor`, if it should stand out.
@@ -86,7 +91,7 @@ to dive, 1-4 for emotes. Keep the arrows for aiming.
 5. **`src/predict.ts`**: if it changes how a player moves, `Me.update` has to do the same on a
    friend's screen, with the same `moveBody`.
 6. **`src/touch.ts`**: a touch control that presses the same key: `button` for a key that's only
-   pressed, `swing` for one that charges and aims as the thumb slides. Place it in `src/style.css`,
+   pressed, `swing` for one that charges and moves the target as the thumb slides. Place it in `src/style.css`,
    in the right-hand corner by the others.
 7. **The help**: `howTo()` (both lists) and `gameBar()` in `src/main.ts`, the serve banner in
    `src/render.ts` (both texts) if it matters for serving, and the README's two tables.
@@ -144,7 +149,7 @@ The `View` goes to every friend 30 times a second.
 3. The host is a player too, but never sends itself messages. Its own actions are method calls
    (`sit`, `configure`, `start`), and its keys are read straight from the keyboard each tick. Give
    the host the same behaviour by that path.
-4. Live and dev builds share rooms while the peer id prefix (`PREFIX`, `padel-pk26-`) matches. If an
+4. Live and dev builds share rooms while the peer id prefix (`PREFIX`, `padel-pk27-`) matches. If an
    old page would misbehave with the new message, change the prefix.
 
 ## The court
@@ -155,7 +160,7 @@ The court's sizes are in `src/sim/constants.ts` (`HALF_W`, `HALF_L`, `SERVICE_LI
 
 | Where | What |
 |---|---|
-| `src/sim/aim.ts` | `DEPTHS`: how deep each shot lands, in metres from the net |
+| `src/sim/aim.ts` | `DEPTHS`: how deep each shot lands, in metres from the net; `autoTarget`: how wide (3.2 m); `clampShotAim`: how near the walls a target goes |
 | `src/sim/sim.ts` | `setupServe`: where everyone stands for the serve (7.6, 8.4, 3.2 and 4.8 m from the net) |
 | `src/sim/bot.ts` | `home`: where bots wait (3.2, 3.4, 6, 7.4 and 8.4 m), and `atNet` (4.5 m) |
 | `src/render.ts` | `drawBack`: the panels every 2.5 m, the side glass in 2 m panels and 4 m from each end, the posts every 2 m |

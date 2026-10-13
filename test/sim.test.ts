@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { shotTarget } from '../src/sim/aim.ts';
+import { autoTarget } from '../src/sim/aim.ts';
 import * as C from '../src/sim/constants.ts';
 import { cleanControls, edges, noControls, seenOf } from '../src/sim/controls.ts';
 import { newMatch, setupServe, step, toView } from '../src/sim/sim.ts';
@@ -154,6 +154,12 @@ test("the arrows move the serve's target in the box", () => {
   const deep = landing(0, 1);
   const short = landing(0, -1);
   assert.ok(deep.at.y > short.at.y + 2, `deep ${deep.at.y}, short ${short.at.y}`);
+
+  // Before the press too, and it stays.
+  const s = humanMatch(0, 3);
+  run(s, (s) => s.timer > 0.4, () => ({ a: keys({ aim: [1, 0] }) }));
+  run(s, (s) => s.timer > 0.6);
+  assert.ok(s.players[0].aimed && s.players[0].aimX > -1.5, `target at ${s.players[0].aimX.toFixed(2)}`);
 });
 
 test('a slice serve stays low after the bounce', () => {
@@ -264,63 +270,77 @@ test('holding the hit key: the swing comes by itself, and the longer the charge 
   assert.ok(full.shot.kmh > 70, `${full.shot.kmh} km/h`);
 });
 
-test('the arrows only aim: they never move the player; WASD does', () => {
+test('the arrows only aim: they move the target, never the player; WASD moves', () => {
   const s = humanMatch(1, 9);
   const a = s.players[0];
   const x = a.x;
   const y = a.y;
-  run(s, (s) => s.timer > 1, () => ({ a: keys({ aim: [1, 1] }) }));
+  const auto = { x: a.aimX, y: a.aimY };
+  assert.ok(!a.aimed && auto.y > 0, 'the automatic shot, on the other half');
+  run(s, (s) => s.timer > 0.3, () => ({ a: keys({ aim: [1, 1] }) }));
   assert.deepEqual([a.x, a.y], [x, y]);
-  assert.deepEqual([a.aimIx, a.aimIy], [1, 1]);
-  run(s, (s) => s.timer > 1.5, () => ({ a: keys({ ix: 1 }) }));
+  assert.ok(a.aimed && a.aimX > auto.x + 2 && a.aimY > auto.y + 2, `target moved to ${a.aimX.toFixed(2)}, ${a.aimY.toFixed(2)}`);
+  const aim = [a.aimX, a.aimY];
+  run(s, (s) => s.timer > 0.8, () => ({ a: keys({ ix: 1 }) }));
   assert.ok(a.x > x + 1);
-  assert.deepEqual([a.aimIx, a.aimIy], [0, 0], 'running does not aim');
+  assert.deepEqual([a.aimX, a.aimY], aim, 'the target stays where the arrows left it');
 });
 
-test('charging plants the feet: the arrows aim and do not move; after the swing they move again', () => {
-  const s = humanMatch(0, 9);
-  serveWith(s, 0);
-  const a = s.players[0];
-  Object.assign(a, { x: 0, y: -6, vx: 0, vy: 0, cooldown: 0 });
-  step(s, { a: keys({ ix: -1, aim: [-1, 0], press: true, hold: true }) });
-  for (let i = 0; i < 30; i++) step(s, { a: keys({ ix: -1, aim: [-1, 0], hold: true }) });
-  assert.ok(Math.abs(a.x) < 0.05 && Math.abs(a.y + 6) < 0.05, `moved to ${a.x.toFixed(2)}, ${a.y.toFixed(2)}`);
-  assert.equal(a.aimIx, -1, 'the arrow aims');
-  incoming(s);
-  a.charge = 0.5;
-  const before = s.shot.n;
-  run(s, (s) => s.shot.n > before, () => ({ a: keys({ ix: -1, hold: true }) }), 3);
-  const x = a.x;
-  for (let i = 0; i < 30; i++) step(s, { a: keys({ ix: -1, hold: true }) });
-  assert.ok(a.x < x - 0.5, 'free to move once the swing came, the key still down');
+test('charging does not slow the player: WASD runs at full speed while the arrows aim', () => {
+  const ran = (charging: boolean) => {
+    const s = humanMatch(0, 9);
+    serveWith(s, 0);
+    const a = s.players[0];
+    Object.assign(a, { x: 0, y: -6, vx: 0, vy: 0, cooldown: 0 });
+    step(s, { a: keys({ ix: -1, aim: [1, 0], press: charging, hold: charging }) });
+    for (let i = 0; i < 30; i++) step(s, { a: keys({ ix: -1, aim: [1, 0], hold: charging }) });
+    assert.equal(a.charge >= 0, charging);
+    assert.ok(a.aimed, 'the arrow aims');
+    return -a.x;
+  };
+  const free = ran(false);
+  assert.ok(free > 1.5, `ran ${free.toFixed(2)} m`);
+  assert.equal(ran(true), free);
 });
 
-test('the arrows at contact aim the shot: ←/→ the side, ↑/↓ deep or short', () => {
+test('the shot goes to the target, the arrows held at contact or not; then it is automatic again', () => {
+  // The arrows held for a quarter of a second before the ball comes, and let go.
   const landing = (ix: number, iy: number) => {
     const xs: number[] = [];
     const ys: number[] = [];
+    let target = { x: 0, y: 0 };
     for (let seed = 1; seed <= 12; seed++) {
       const s = humanMatch(0, seed);
       serveWith(s, 0);
+      const a = s.players[0];
+      Object.assign(a, { x: 0, y: -6, vx: 0, vy: 0 });
+      for (let i = 0; i < 15; i++) step(s, { a: keys({ aim: [ix, iy] }) });
       incoming(s, 0.05);
+      target = { x: a.aimX, y: a.aimY };
       const before = s.shot.n;
-      run(s, (s) => s.shot.n > before, () => ({ a: keys({ aim: [ix, iy], press: true, hold: true }) }), 3);
+      run(s, (s) => s.shot.n > before, () => ({ a: keys({ press: true, hold: true }) }), 3);
+      step(s, {});
+      assert.ok(!a.aimed, 'automatic again after the shot');
       const m = s.mark.n;
       run(s, (s) => s.mark.n > m || s.phase !== 'rally', () => ({}), 4);
       xs.push(s.mark.x);
       ys.push(s.mark.y);
     }
     const avg = (v: number[]) => v.reduce((a, b) => a + b, 0) / v.length;
-    return { x: avg(xs), y: avg(ys) };
+    const at = { x: avg(xs), y: avg(ys) };
+    assert.ok(Math.hypot(at.x - target.x, at.y - target.y) < 0.6, `aimed at ${target.x.toFixed(1)}, ${target.y.toFixed(1)}, landed about ${at.x.toFixed(1)}, ${at.y.toFixed(1)}`);
+    return at;
   };
   const right = landing(1, 0);
   const left = landing(-1, 0);
-  assert.ok(right.x > 2 && left.x < -2, `right ${right.x.toFixed(1)}, left ${left.x.toFixed(1)}`);
+  assert.ok(right.x > 1.8 && left.x < -1.8, `right ${right.x.toFixed(1)}, left ${left.x.toFixed(1)}`);
   const deep = landing(0, 1);
   const short = landing(0, -1);
-  assert.ok(deep.y > short.y + 3, `deep ${deep.y.toFixed(1)}, short ${short.y.toFixed(1)}`);
-  // No arrows: crosscourt.
-  assert.ok(shotTarget(0, 0, 0, 3, 'drive').x < -2.5 && shotTarget(0, 0, 0, -3, 'drive').x > 2.5);
+  assert.ok(deep.y > short.y + 3.5, `deep ${deep.y.toFixed(1)}, short ${short.y.toFixed(1)}`);
+  // No arrows: crosscourt from the side, down the middle from the middle, for either team.
+  assert.ok(autoTarget(0, 3, 'drive').x < -2.5 && autoTarget(0, -3, 'drive').x > 2.5 && autoTarget(1, 3, 'drive').x < -2.5);
+  assert.ok(autoTarget(0, 0, 'drive').x === 0, 'from the middle, down the middle');
+  assert.ok(autoTarget(0, 0, 'lob').y > autoTarget(0, 0, 'drive').y + 1 && autoTarget(1, 0, 'drive').y < 0);
 });
 
 test('overheads: a tap is a bandeja, a full charge at the net a por tres out of the court', () => {
@@ -479,6 +499,23 @@ test('a remote player says where they are; the host keeps them in their half, an
 
   const clean = cleanControls({ ix: 7, iy: -0.2, h: 'x', hd: 1, px: 1e9, py: 2, pl: 3, ek: 9 });
   assert.deepEqual([clean.ix, clean.iy, clean.h, clean.hd, clean.px, clean.ek], [1, -1, 0, false, 20, 4]);
+});
+
+test("a remote player's target: where they say, kept on the other half; else the automatic shot", () => {
+  const s = humanMatch(0);
+  const b = s.players[1];
+  const send = (o: object) => {
+    const c = { ...noControls(), px: 1.5, py: 3, pl: s.place, ...o };
+    step(s, { b: edges(c, seenOf(c)) });
+  };
+  send({ ax: 2, ay: -4 });
+  assert.deepEqual([b.aimed, b.aimX, b.aimY], [true, 2, -4]);
+  send({ ax: 9, ay: 4 });
+  assert.ok(b.aimX < C.HALF_W && b.aimY < 0, `kept in at ${b.aimX}, ${b.aimY}`);
+  send({});
+  assert.ok(!b.aimed && b.aimY < 0, 'the automatic shot');
+  send({ ax: 2, ay: -4, pl: s.place - 1 });
+  assert.ok(!b.aimed, 'not from before the serve');
 });
 
 for (const [name, seats] of [

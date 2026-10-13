@@ -12,8 +12,8 @@ For the game as a player sees it, read the README. For how to change things, rea
 | `src/sim/constants.ts` | sim | The court's sizes, the ball's bounces, and every number that sets the feel: speeds, reach, charge and serve times, the dive |
 | `src/sim/types.ts` | sim | The shapes: `TickInput`, `Player`, `Ball`, `State`, and the `View` sent over the network |
 | `src/sim/court.ts` | sim | `moveBall`: the ball against the floor, the net and the walls, as events. `hittableDistance`: may this player hit it now. The side helpers `halfSign`, `fwd`, `rightX` |
-| `src/sim/body.ts` | sim | `moveBody`: running, standing still while charging, the dive. Run by the host and by each player's own screen |
-| `src/sim/aim.ts` | sim | Where shots go: `shotKind`, `shotTarget` and the depths; the serve's box. Also draws the player's target |
+| `src/sim/body.ts` | sim | `moveBody`: running (as fast while charging), the dive. Run by the host and by each player's own screen |
+| `src/sim/aim.ts` | sim | Where shots go: every player's target (`steer`, `autoTarget`, `shotAim`), `shotKind`, the depths, the scatter; the serve's box. Shared with the screen, which draws the target |
 | `src/sim/sim.ts` | sim | `newMatch`, `step`, `toView`: the rules, serving, swings and shots, scoring, the stats, `FORMATS`, `EMOTES` |
 | `src/sim/bot.ts` | sim | The bots: where the ball will go, who takes it, where to stand, when to charge, where to aim; `LEVELS` |
 | `src/sim/controls.ts` | sim | `Controls`, the keys as they travel; `edges`, which turns them into one tick's input; `cleanControls` |
@@ -23,7 +23,7 @@ For the game as a player sees it, read the README. For how to change things, rea
 | `src/main.ts` | browser | The screens, the frame loop, the player's overlay, and the glue between all of it |
 | `src/render.ts` | browser | The court in perspective on a canvas, the players, the ball, the HUD |
 | `src/input.ts` | browser | The keyboard: held keys, plus presses counted |
-| `src/touch.ts` | browser | The touch controls: a stick for the left thumb, Hit and Lob that aim as the thumb slides, Dive, the emotes. They press the keyboard's keys |
+| `src/touch.ts` | browser | The touch controls: a stick for the left thumb, Hit and Lob that move the target as the thumb slides, Dive, the emotes. They press the keyboard's keys |
 | `src/dom.ts` | browser | `h()`, which builds the screens' elements and only ever sets text |
 | `src/audio.ts` | browser | Every sound, synthesized with Web Audio |
 
@@ -41,9 +41,9 @@ calls `step(s, inputs)`:
 2. `botInputs(s)` decides every bot's keys.
 3. `control()` for each player:
    - counts down the cooldown, the swing and an emote, and starts a new emote;
-   - reads the aim (`aim`, the arrows);
    - moves them with `moveBody`, or, for a friend, puts them where they say they are (see
      [Where a friend is](#where-a-friend-is));
+   - moves their target with `aimControl` (see [Aiming](#aiming));
    - then `serveControl` for the server waiting to serve, `swingControl` for everyone else.
 4. Before the serve, `holdBall` keeps the ball in the server's hand.
 5. In a rally (and after it, while the ball dies), `moveBall` runs in 4 substeps. Each event it
@@ -59,11 +59,11 @@ Every second step, `toView` makes the `View` and it goes to every friend: 30 a s
 `frame()` in `main.ts`, every animation frame:
 
 - **The host** draws `toView(session.state)` straight from the match.
-- **A friend** reads the newest view, moves their own figure with `Me.update`, sends their keys and
-  position (`sendControls`), then draws the smoothed view with their own figure put where `Me`
+- **A friend** reads the newest view, moves their own figure and target with `Me.update`, sends their
+  keys, position and target (`sendControls`), then draws the smoothed view with their own figure put where `Me`
   says.
-- `overlay()` works out what only the player sees: their charge, where the shot would go, and
-  whether the ball is in their reach.
+- `overlay()` works out what only the player sees: their charge, their target (the host's from the
+  match, a friend's from `Me`) and its scatter, and whether the ball is in their reach.
 - `renderer.draw` draws it all, `playEvents` plays the counters that went up, and the end screen
   appears when the phase is `over`.
 - With no match on (the home and lobby screens), it steps a match of four bots itself and draws
@@ -113,10 +113,11 @@ the partners nearer the net. It sets the target in the box, puts the ball in the
 
 - For the first 0.5 s (`SERVE_DELAY`) a tap does nothing, but a key held through it starts the
   serve then.
-- Before charging, the server walks inside their serving zone (`clampBody` with `serveSide`).
+- The server walks inside their serving zone (`clampBody` with `serveSide`), charging or not.
+- The arrows move the target in the box at `SERVE_AIM_SPEED` (3.2 m/s), before the press or during
+  the charge, kept inside it by `clampServeAim`.
 - A press starts the charge: Space (or J) for a flat serve, E (or K) for a slice. While it's held the
-  server stands still, the bar fills over `SERVE_FULL` (1 s) and the arrows move the target in the
-  box at `AIM_SPEED`, kept inside it by `clampServeAim`.
+  bar fills over `SERVE_FULL` (1 s).
 - Letting go serves (`serve()`): the bar sets the pace (8 to 17.5 m/s flat, 7 to 12.5 sliced).
   Above `SERVE_RED` (85%) the serve goes wild: the target's scatter grows from 0.22 m to over 1 m
   and the net clearance shrinks. Held for 3 s, it goes by itself. A server idle for 8 s serves at
@@ -127,8 +128,8 @@ the partners nearer the net. It sets the target in the box, puts the ball in the
 `swingControl` is the charge:
 
 1. A press arms a swing. Once the cooldown (`COOLDOWN`, 0.4 s) is over the charge starts.
-2. While the key is held the charge grows to `CHARGE_FULL` (0.75 s) and stays there, and the player
-   stands still (`frozen` in `moveBody`).
+2. While the key is held the charge grows to `CHARGE_FULL` (0.75 s) and stays there. The player
+   runs at full speed all the while: charging never slows them.
 3. Letting go swings: `SWING` (0.36 s) during which contact can happen, at the charge's power.
 
 `tryHit` makes contact, where the ball comes **closest** to the player within their reach: while
@@ -143,11 +144,11 @@ the reach is 1.45 times longer and the contact is automatic: a diving save.
 - **The kind**: `shotKind` (`aim.ts`). A lob with the lob key. On a ball above `SMASH_Z` (1.75 m),
   an overhead: a bandeja under 35% power, a smash above, and a por tres at 90% or more within 5 m
   of the net (and `q` of at least 0.35).
-- **The target**: `shotTarget`, from the arrows at contact. ←/→ pick a side (3.3 m out), with
-  neither it goes crosscourt (sharper from wide). ↑/↓ pick deep or short from the shot's `DEPTHS`.
-- **The error**, in metres of scatter round the target: off-centre contact, power, a fast incoming
-  ball, a volley, and above all a low volley at the feet add to it; a perfect contact, a ball off the
-  glass, a bandeja or a por tres take from it.
+- **The target**: `shotAim` (`aim.ts`): the player's target, or the automatic shot if they haven't
+  moved it (see [Aiming](#aiming)).
+- **The error**, `shotSpread` (`aim.ts`), in metres of scatter round the target: off-centre contact,
+  power, a fast incoming ball, a volley, and above all a low volley at the feet add to it; a perfect
+  contact, a ball off the glass, a bandeja or a por tres take from it.
 - **The pace**: a drive goes 9 to 22 m/s with the charge, more for a perfect contact or off the
   glass; a smash 15 to 25; a por tres 26 with a kick; a bandeja 13 with slice. Lobs, digs and frame
   shots give a flight time instead.
@@ -158,6 +159,26 @@ the reach is 1.45 times longer and the contact is automatic: a diving save.
 `launch()` sends the ball to land on the target: the flight time comes from the pace (at least
 0.2 s) and grows in 6% steps until the ball clears the net by the shot's margin. A margin below
 zero sends it into the net.
+
+### Aiming
+
+Every player has a target on the other half (`aimX`, `aimY` on `Player`), and `aimed` says whether
+they've moved it. `aimControl` (`sim.ts`) keeps it every tick, for every player:
+
+- Until they move it, it's the **automatic shot** (`autoTarget`): crosscourt, more sharply the wider
+  they stand, down the middle from the middle, to the plain depth (`DEPTHS`) of the shot they'll
+  most likely make (`likelyShot`). For the server, it's the middle of the box (`defaultServeAim`).
+- **The arrows move it** (`steer`) at `AIM_SPEED` (10 m/s), any time, and it stays where they leave
+  it, on the other half and inside the walls (`clampShotAim`). Nothing is read at contact: the shot
+  goes where the target is then.
+- After **a shot by their team** (`shotDone`), and at each serve's placement, it's automatic again.
+- A friend moves their own on their screen and sends it once they've moved it (see
+  [Where a friend is](#where-a-friend-is)). A bot says where it aims (`target`, from `aimFor`).
+
+At contact `shotAim` takes the target as it is, or the automatic shot for the shot it turned out to
+be. A lob still goes at least 6.5 m deep, and a por tres lands short, so it still kicks out.
+`shotSpread` is the scatter round it; the player's screen draws it for a fair contact, as a disc
+round the target.
 
 `shotDone` records who hit last and what, the shot's speed and name for the screen (`s.shot`), and
 the stats.
@@ -188,8 +209,9 @@ the stats.
   to their place (`home`): at the net after a good shot of their own, back when lobbed, towards the
   middle while the partner takes the ball. As the ball comes they charge for the power they want,
   so it's full when it arrives, and dive for a ball they can't run to.
-- **`aimFor`** aims away from the other side, between two of them, short and wide from the net, or
-  at the feet of players at the net. **`wantsLob`** lobs players at the net. **`serveInput`**
+- **`aimFor`** gives a target: away from the other side, down the middle between two, short and wide
+  from the net, or at the feet of players at the net, at the depth of the shot they expect to play;
+  otherwise a side at random, or the automatic shot. **`wantsLob`** lobs players at the net. **`serveInput`**
   serves to the T, the body or wide, at a chosen power, sometimes sliced.
 - **`LEVELS`** sets how well: speed, reaction time, slop, errors, power, how smart the aim, how
   often they go to the net, go for a por tres, dive, and how near the lines they serve.
@@ -208,7 +230,7 @@ flowchart LR
 ```
 
 Everyone connects to the host over WebRTC data channels. PeerJS's free public server only
-introduces them, and relays the traffic when a router is strict. The host's peer id is `padel-pk26-`
+introduces them, and relays the traffic when a router is strict. The host's peer id is `padel-pk27-`
 plus a five-character room code (no 0/o or 1/l/i), and the invite link is `?room=<code>`. A room
 holds up to 8 people, players and watchers.
 
@@ -236,13 +258,13 @@ To the others (`ToClient`):
 | | |
 |---|---|
 | `ix`, `iy` | WASD: −1, 0 or 1 across and along, relative to my screen |
-| `tx`, `ty` | The arrows, the same way: where I aim |
+| `tx`, `ty` | The arrows, the same way: they move my target |
 | `h`, `hd` | How many times the hit key has gone down so far, and whether it's down now |
 | `l`, `ld` | The same for the lob key |
 | `d` | Dive presses so far |
 | `e`, `ek` | Emote presses so far, and the last emote (1-4) |
 | `px`, `py`, `pl` | A friend's own position, and the placement it belongs to |
-| `ax`, `ay` | A friend's serve target in the box |
+| `ax`, `ay` | A friend's target, once they've moved it: the serve's in the box, or the next shot's. Without them the host plays the automatic shot |
 
 `edges` turns the counts into presses for one tick by comparing them with the last ones it saw. A
 press and a release that both arrive between two ticks make a tap.
@@ -250,7 +272,7 @@ press and a release that both arrive between two ticks make a tap.
 The `View` (`types.ts`) has every player (position, swing, charge and what's charging, dive, emote,
 and their speed, reach and height for the friend's own screen), the ball, the phase and its timer,
 the `place` counter, the score (points, games, sets, earlier sets, tie-break), the serve (server,
-side, box, target), who may hit, the message, the latest shot and bounce, the sound counters, and,
+side, box), who may hit, the message, the latest shot and bounce, the sound counters, and,
 once it's over, the stats.
 
 ### Where a friend is
@@ -265,7 +287,11 @@ every `in` message, with `pl`, the last `place` they saw.
 - When a new serve is set up, `place` goes up. The friend's browser sees the new number in the next
   view and **snaps** its figure to where the host put it. Until then the host ignores its positions.
 - A friend's charge on their own screen starts at their key press, and ends when the host's view
-  shows it over, so the charge ring and the standing still match what the host does.
+  shows it over, so the charge ring matches what the host does.
+- A friend's target moves on their own screen too, with the same `steer` and limits, and goes back to
+  automatic when their view shows a shot by their team (the shot counter) or a new placement. They
+  send it as `ax`, `ay` only once they've moved it: the automatic shot the host works out itself,
+  at contact, for the shot it turns out to be.
 - Everything else (the ball, the other players) is drawn 80 ms behind the newest view
   (`INTERP_MS`), between the two views either side, so it moves smoothly. A ball that jumps more
   than 3 m (a new serve) snaps instead of sliding.
@@ -277,7 +303,7 @@ every `in` message, with `pl`, the last `place` they saw.
 | The ball, contact, the shots, the rules, the score | The host's browser |
 | The bots | The host's browser |
 | Where a player is | Their own browser; the host keeps them on their side, and ignores them until they've seen the latest serve's placement |
-| Where a friend aims their serve | Their own browser; the host keeps it in the box |
+| Where a friend aims | Their own browser, once they've moved their target; the host keeps it on the other half, or in the box, and ignores it until they've seen the latest serve's placement |
 | When a key went down or up | The player's browser counts; the host's ticks decide when that lands |
 | The lobby: places, mode, format, the bots' level | The host |
 
@@ -301,8 +327,9 @@ the room closes and everyone goes back to the home screen.
   names, the emotes and the shot speeds are drawn up to 1.45 times larger (`zoom`).
 - **Three layers drawn once**: the floor, lines, far glass and side walls; the net; the near frame.
   Each frame puts them down, with the players, the ball and the net sorted far to near between.
-- **The player's own overlay**: the serve box highlighted, the target (pulsing, in their colour),
-  the ring at their feet (it lights up when the ball is in reach), and beside them the serve's power
+- **The player's own overlay**: the serve box highlighted; the target in their colour while the next
+  shot is theirs or once they've moved it (dashed while it's the automatic shot, pulsing while they
+  charge), with a faint disc round it for the scatter; the ring at their feet (it lights up when the ball is in reach), and beside them the serve's power
   bar.
 - **Everyone's**: a ring at the feet that fills as a player charges (white to orange; for a serve,
   green, then red in the red zone), the racket drawn back while charging, a lunge and a fall for a

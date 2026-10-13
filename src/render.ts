@@ -405,7 +405,9 @@ function banner(ctx: CanvasRenderingContext2D, title: string, sub: string, color
 export interface Overlay {
   charge: number; // 0-1, or -1
   serve: boolean; // they are serving
-  target: { x: number; y: number } | null; // where the shot or serve would go
+  target: { x: number; y: number } | null; // where the shot or serve goes, while it's theirs to play
+  aimed: boolean; // they moved it; else it's the automatic shot
+  spread: number; // m: how far off it the ball may land, about
   reachable: boolean; // the ball is within their reach now
   reach: number;
 }
@@ -525,16 +527,25 @@ export class Renderer {
       floorRing(ctx, me.x, me.y, ov.reach, flip);
       ctx.stroke();
     }
-    if (me && ov?.target && ov.charge >= 0) {
-      const pulse = 0.8 + 0.2 * Math.sin(now / 90);
+    if (me && ov?.target) {
       const t = ov.target;
+      ctx.strokeStyle = ctx.fillStyle = TEAM_COLOR[me.team];
+      // Where the ball may land: a faint disc that grows with the risk.
+      floorRing(ctx, t.x, t.y, ov.spread, flip);
+      ctx.globalAlpha = 0.14;
+      ctx.fill();
+      ctx.globalAlpha = 0.4;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      // The target: dashed while it's the automatic shot, solid once they've moved it, and
+      // pulsing while they charge.
+      ctx.globalAlpha = !ov.aimed ? 0.8 : ov.charge >= 0 ? 0.8 + 0.2 * Math.sin(now / 90) : 1;
       ctx.lineWidth = 2.5;
-      ctx.strokeStyle = TEAM_COLOR[me.team];
-      ctx.globalAlpha = pulse;
+      if (!ov.aimed) ctx.setLineDash([7, 5]);
       floorRing(ctx, t.x, t.y, 0.42, flip);
       ctx.stroke();
+      ctx.setLineDash([]);
       floorRing(ctx, t.x, t.y, 0.18, flip);
-      ctx.fillStyle = TEAM_COLOR[me.team];
       ctx.fill();
       ctx.globalAlpha = 1;
     }

@@ -17,7 +17,7 @@ export interface Controls {
   px?: number; // a remote player's position
   py?: number;
   pl?: number; // the placement they saw
-  ax?: number; // where they aim their serve
+  ax?: number; // where they aim, once they've moved their target
   ay?: number;
 }
 
@@ -42,7 +42,7 @@ export function edges(c: Controls, seen: Seen): TickInput {
   Object.assign(seen, seenOf(c));
   if (c.pl !== undefined && c.px !== undefined && c.py !== undefined) {
     inp.pose = { x: c.px, y: c.py, place: c.pl };
-    if (c.ax !== undefined && c.ay !== undefined) inp.serveAim = { x: c.ax, y: c.ay };
+    if (c.ax !== undefined && c.ay !== undefined) inp.target = { x: c.ax, y: c.ay };
   }
   return inp;
 }

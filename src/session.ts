@@ -6,7 +6,7 @@ import { cleanControls, edges, noControls, seenOf, type Controls, type Seen } fr
 import { FORMATS, newMatch, step, toView } from './sim/sim.ts';
 import type { Difficulty, FormatKey, Seat, State, Team, TickInput, View } from './sim/types.ts';
 
-const PREFIX = 'padel-pk26-';
+const PREFIX = 'padel-pk27-';
 const ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
 export const HOST_ID = 'host';
 const MAX_MEMBERS = 8;

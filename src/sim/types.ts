@@ -26,7 +26,7 @@ export interface TickInput {
   dive: boolean;
   emote: number; // 1-4 on the tick one was pressed, else 0
   pose?: Pose;
-  serveAim?: { x: number; y: number }; // where a remote player or a bot aims their serve
+  target?: { x: number; y: number }; // where a remote player or a bot aims, once they've chosen
   aim?: [number, number];
 }
 
@@ -61,8 +61,6 @@ export interface Player extends Seat {
   charge: number; // seconds the hit (or lob) key has been held, or -1
   chargeKind: SwingKind;
   armed: SwingKind | null; // a press waiting for the cooldown to end
-  aimIx: number; // the arrows this tick, which aim the shot
-  aimIy: number;
   prevD: number; // distance to the ball last tick, to hit at the closest point
   nearD: number; // closest the ball came within reach lately, for a late swing
   nearAgo: number; // seconds since then
@@ -71,8 +69,9 @@ export interface Player extends Seat {
   diveCd: number;
   diveX: number;
   diveY: number;
-  aimX: number; // where the server aims, in the receiver's box
+  aimX: number; // their target: the serve's in the receiver's box, or the next shot's
   aimY: number;
+  aimed: boolean; // the arrows moved it since their team's last shot; else it's the automatic shot
   emote: number;
   emoteT: number;
 }
@@ -194,7 +193,6 @@ export interface View {
   serverId: string;
   serveSide: number;
   boxSign: number;
-  serveAim: { x: number; y: number };
   hitTeam: number; // the last hitter's team, or -1
   only: string; // the one player who may hit (the serve's receiver), or ''
   flight: boolean; // the serve hasn't bounced yet: nobody may hit

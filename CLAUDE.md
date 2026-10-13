@@ -39,8 +39,9 @@ npm run deploy       # tests, builds, force-pushes dist/ to gh-pages: it publish
 ### Trying it in a browser
 
 - `?debug` exposes `window.__padel`: the view being drawn (`v`), the player's own overlay (`ov`:
-  charge, target, whether the ball is in reach), and on a friend's screen their own figure (`me`)
-  and the placement it has seen (`place`). That's what Playwright checks read.
+  charge, target, whether they moved it, its spread, whether the ball is in reach), and on a
+  friend's screen their own figure (`me`) and the placement it has seen (`place`). That's what
+  Playwright checks read.
 - `?lag=150` delays a friend's messages by 75 ms each way, to try a far-away host. It only acts on
   the joining side; the host ignores it.
 - To play alone, create a room and start it: the empty places fill with bots. To test with other
@@ -134,27 +135,33 @@ How a match runs:
 - **The touch controls press the keyboard's keys.** `src/touch.ts` calls `keys.press` and
   `keys.release` with the same codes (WASD, the arrows, Space, E, Shift, the digits), so everything
   after `input.ts` is the same for both, and the network and the match don't know. A new key needs
-  a touch control too. A slide's aim stays 0.5 s after the thumb lifts (`AIM_KEEP`), because the
-  swing that follows reads it.
+  a touch control too. A slide moves the target, which stays where it's left, so the arrows let go
+  the moment the thumb lifts.
 - **The frame is as wide as the screen.** `render.ts` draws a frame 800 tall and at least 1280 wide,
   wider on a wider screen, so the court keeps its size. `W` changes when the canvas does, so draw
   anything centred at `W / 2`, never at a fixed x. On a short screen the HUD, names and floaters are
   drawn up to 1.45 times larger (`zoom`), and the banners shrink to stay clear of the score.
 - **Movement and aim are shared with the screen.** `src/sim/body.ts` runs on the host and on a
-  friend's screen, and `src/sim/aim.ts` draws the target the player sees. A change there changes
-  both, which is the point; keep them free of anything only the host knows.
+  friend's screen, and so does `src/sim/aim.ts`: it moves the target and gives the spread the
+  player sees. A change there changes both, which is the point; keep them free of anything only the
+  host knows.
+- **A target is sent only once it's moved.** A friend's `ax`, `ay` mean "I aimed here"; without
+  them the host plays the automatic shot, for the shot it turns out to be. A target goes back to
+  automatic in two places that must agree: `shotDone` and `setupServe` on the host, and `Me.update`
+  (the shot counter and the place) on a friend's screen.
 - **A friend's charge ends when the host says so.** `Me` keeps a charge from the key press and ends
-  it once the host's view shows that player's charge over (the swing came), so the friend can move
-  again with the key still down, as the host can.
-- **The peer id prefix** `padel-pk26-` in `src/session.ts` decides which builds can see each other's
+  it once the host's view shows that player's charge over (the swing came), so the ring empties
+  with the key still down, as on the host.
+- **The peer id prefix** `padel-pk27-` in `src/session.ts` decides which builds can see each other's
   rooms. The live game and a dev build share rooms while it matches. Change it when the message or
   view format changes so that an old page would break.
 - **The tests guard the feel.** They check, among other things: a full charge at least 1.5 times as
   fast as a tap and over 70 km/h; 6 or fewer faults in 60 green serves and at least 10 more in the
   red; a por tres leaving the court at least 6 times in 10; a dive going 1.8 times as far as running
-  would in the same time; and the bots, at every level and in every mode, averaging more than 2.5
-  shots a point. A change to the
-  constants, the error formula or the bots has to keep them passing.
+  would in the same time; charging not slowing a player at all; a target moved before the ball
+  comes, and let go, still getting the shot there; and the bots, at every level and in every mode,
+  averaging more than 2.5 shots a point. A change to the constants, the spread (`shotSpread`) or
+  the bots has to keep them passing.
 - **A host that leaves ends the room** for everyone. A player who leaves mid-match is replaced by a
   bot with their name and "(bot)". Someone joining mid-match watches; they can take a place once
   the host goes back to the lobby.

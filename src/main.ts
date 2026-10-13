@@ -5,7 +5,7 @@ import { GAME_KEYS, Keyboard } from './input.ts';
 import { Me } from './predict.ts';
 import { Renderer, TEAM_NAME, type Overlay } from './render.ts';
 import { ClientSession, cleanName, HostSession, MODE_SEATS, mySeat, seatTeam, type Lobby, type Mode, type SeatKey } from './session.ts';
-import { shotKind, shotTarget } from './sim/aim.ts';
+import { likelyShot, serveSpread, shotSpread } from './sim/aim.ts';
 import { DT } from './sim/constants.ts';
 import { sideOf } from './sim/court.ts';
 import { FORMATS, newMatch, step, toView } from './sim/sim.ts';
@@ -190,8 +190,8 @@ function howTo(): HTMLElement {
   const items = touch
     ? [
         item('Move', 'Put your left thumb anywhere on the left half and slide it: a stick appears under it. You always play up the screen. The ring round your feet lights up when the ball is in reach.'),
-        item('Hit', 'Hold Hit as the ball comes: the longer, the harder. Let go to swing, or keep holding and you swing by yourself as it arrives. Holding plants your feet, so get to the ball first. A quick tap is the safe shot; the closer the ball passes, the better.'),
-        item('Aim', 'While you hold Hit, slide your thumb: left or right for the side, up deep, down short. Without, it goes crosscourt. Your target shows on the other side.'),
+        item('Hit', 'Hold Hit as the ball comes: the longer, the harder. Let go to swing, or keep holding and you swing by yourself as it arrives. You run as fast while you hold it. A quick tap is the safe shot; the closer the ball passes, the better.'),
+        item('Aim', 'While you hold Hit, slide your thumb to move your target on the other side; it stays where you leave it. Until you move it, it is the crosscourt shot (dashed). The disc round it is where the ball may land: wider with power, and against a fast ball.'),
         item('Serve', 'Walk along the baseline with the stick, then hold Hit: the power bar fills (the red top risks a fault), and sliding your thumb moves your target in the box. Let go to serve. Lob serves a slice, which stays low.'),
         overheads,
         item('Lob, dive, emotes', 'Lob aims as Hit does; hold it for a higher one. Dive dives the way the stick points, for a ball out of reach. 💬: Vamos!, 😂, Sorry!, 👏'),
@@ -200,9 +200,9 @@ function howTo(): HTMLElement {
       ]
     : [
         item('Move', 'WASD. You always play up the screen. The ring round your feet lights up when the ball is in reach.'),
-        item('Aim', 'The arrows, which only aim: ←/→ the side, ↑ deep, ↓ short, as you hit. With none, it goes crosscourt. Your target shows on the other side while you charge.'),
-        item('Serve', 'Walk along the baseline with A/D, then hold Space: the power bar fills (the red top risks a fault) and the arrows move your target in the box. Let go to serve. E (or K) serves a slice, which stays low.'),
-        item('Hit', 'Hold Space as the ball comes: the longer, the harder. Let go to swing, or keep holding and you swing by yourself as it arrives. Charging plants your feet, so get to the ball first. A quick tap is the safe shot; the closer the ball passes, the better.'),
+        item('Aim', 'The arrows move your target on the other side, any time, and it stays where you leave it. Until you move it, it is the crosscourt shot (dashed), and after each shot by your team it goes back to that. The disc round it is where the ball may land: wider with power, and against a fast ball.'),
+        item('Serve', 'Walk along the baseline with A/D, then hold Space: the power bar fills (the red top risks a fault). The arrows move your target in the box, before or while you charge. Let go to serve. E (or K) serves a slice, which stays low.'),
+        item('Hit', 'Hold Space as the ball comes: the longer, the harder. Let go to swing, or keep holding and you swing by yourself as it arrives. You run as fast while you charge. A quick tap is the safe shot; the closer the ball passes, the better.'),
         overheads,
         item('Lob, dive, emotes', 'E (or K) lobs; hold it for a higher one. Shift (or L) dives the way you run, for a ball out of reach. 1 to 4: Vamos!, 😂, Sorry!, 👏'),
         rules,
@@ -395,23 +395,19 @@ function attractView(now: number): View {
   return toView(attract);
 }
 
-// What only the player sees about themselves: their charge, where it would go, and whether the
-// ball is in reach.
-function overlay(v: View, id: string, charge: number, lob: boolean): Overlay | undefined {
+// What only the player sees about themselves: their charge, their target (aim; aimed if they moved
+// it) and how far off it the ball may land, and whether the ball is in reach.
+function overlay(v: View, id: string, charge: number, lob: boolean, aim: { x: number; y: number }, aimed: boolean): Overlay | undefined {
   const p = v.players.find((q) => q.id === id);
   if (!p) return undefined;
   const serve = v.phase === 'serve' && v.serverId === id;
   const b = v.ball;
-  const c = keys.read();
-  let target: Overlay['target'] = null;
-  if (charge >= 0) {
-    if (serve) target = session instanceof ClientSession ? me.aim : v.serveAim;
-    else {
-      // An overhead only once a high ball is close; until then, the shot it will most likely be.
-      const near = Math.hypot(b.x - p.x, b.y - p.y) < 2.5;
-      target = shotTarget(p.team, c.tx, c.ty, b.x, shotKind(lob ? 'lob' : 'drive', charge, near ? b.z : 0, p.y));
-    }
-  }
+  // The target shows while the next shot is theirs to play, and once they've moved it.
+  const turn = v.phase === 'rally' && v.hitTeam !== p.team && (!v.only || v.only === id);
+  const target = serve || turn || charge >= 0 || aimed ? aim : null;
+  // A shot's spread for a fair contact, on a ball as fast as the last shot; it can't know more.
+  const power = Math.max(0, charge);
+  const spread = serve ? serveSpread(power) : shotSpread(likelyShot(lob, power, b, p), 0.6, power, v.shot.kmh / 3.6, false, false, false, false);
   const reachable =
     v.phase === 'rally' &&
     !v.flight &&
@@ -420,7 +416,7 @@ function overlay(v: View, id: string, charge: number, lob: boolean): Overlay | u
     sideOf(b.y) === p.team &&
     b.z <= p.maxZ &&
     Math.hypot(b.x - p.x, b.y - p.y) <= p.reach;
-  return { charge, serve, target, reachable, reach: p.reach };
+  return { charge, serve, target, aimed, spread, reachable, reach: p.reach };
 }
 
 let lastFrame = 0;
@@ -433,8 +429,9 @@ function frame(now: number): void {
   let ov: Overlay | undefined;
   if (lobby?.playing && session instanceof HostSession && session.state) {
     v = toView(session.state);
-    const p = v.players.find((q) => q.id === session!.you);
-    if (p) ov = overlay(v, p.id, p.charge, p.ck % 2 === 1);
+    const p = session.state.players.find((q) => q.id === session!.you);
+    const vp = v.players.find((q) => q.id === session!.you);
+    if (p && vp) ov = overlay(v, p.id, vp.charge, vp.ck % 2 === 1, { x: p.aimX, y: p.aimY }, p.aimed);
   }
   if (lobby?.playing && session instanceof ClientSession) {
     const raw = session.newest();
@@ -448,7 +445,7 @@ function frame(now: number): void {
       const charge = me.charge(now);
       const dive = me.body.dive > 0 ? 1 : me.body.down > 0 ? 2 : 0;
       v.players = v.players.map((p) => (p.id === id ? { ...p, x: me.body.x, y: me.body.y, charge, dive } : p));
-      ov = overlay(v, id, charge, me.kind() === 'lob');
+      ov = overlay(v, id, charge, me.kind() === 'lob', me.aim, me.aimed);
     }
   }
   if (debug) (window as unknown as { __padel: unknown }).__padel = { v, ov, me: { ...me.body }, place: me.place };

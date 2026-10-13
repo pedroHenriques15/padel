@@ -1,7 +1,7 @@
 // The touch controls, for phones and tablets. A stick appears under the left thumb to run. On the
-// right, holding Hit (or Lob) charges, and sliding the thumb aims, as the arrows do; Dive dives the
-// way the stick points. They press the keyboard's own keys (input.ts), so nothing after it can
-// tell them apart.
+// right, holding Hit (or Lob) charges, and sliding the thumb moves the target, as the arrows do;
+// Dive dives the way the stick points. They press the keyboard's own keys (input.ts), so nothing
+// after it can tell them apart.
 import { h } from './dom.ts';
 import type { Keyboard } from './input.ts';
 import { EMOTES } from './sim/sim.ts';
@@ -11,8 +11,7 @@ const RUN = ['KeyD', 'KeyA', 'KeyW', 'KeyS'];
 const AIM = ['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown'];
 const REACH = 46; // how far, in px, the stick's knob goes; past it the stick follows the thumb
 const RUN_DEAD = 12; // how far the thumb slides before the player runs, so a resting thumb stands still
-const AIM_DEAD = 20; // more to aim, so a tap that slides a little is still the plain shot
-const AIM_KEEP = 500; // how long, in ms, the aim outlasts the press: the swing after letting go reads it
+const AIM_DEAD = 20; // more to aim, so a tap that slides a little leaves the target where it is
 
 // A slide of dx, dy pixels as one of eight directions, each -1, 0 or 1 across and up the screen,
 // or none inside the dead zone.
@@ -56,7 +55,6 @@ export class TouchPad {
   readonly el: HTMLElement;
   private keys: Keyboard;
   private ends: (() => void)[] = [];
-  private aimTimer = 0;
   private emotes: HTMLElement;
 
   constructor(keys: Keyboard) {
@@ -78,7 +76,6 @@ export class TouchPad {
   // Lets go of everything: the match is over, or the page went away.
   reset(): void {
     for (const end of this.ends) end();
-    clearTimeout(this.aimTimer);
     this.hold(AIM, 0, 0);
     this.emotes.classList.remove('open');
   }
@@ -140,8 +137,8 @@ export class TouchPad {
     return zone;
   }
 
-  // Hit and Lob: holding charges, and sliding the thumb from where it landed aims. The aim stays
-  // a moment after letting go, for the swing.
+  // Hit and Lob: holding charges, and sliding the thumb from where it landed moves the target,
+  // which stays where it's left.
   private swing(label: string, cls: string, code: string): HTMLElement {
     const knob = h('div', { class: 'knob' });
     const el = h('div', { class: `btn ${cls}` }, h('span', {}, label), knob);
@@ -153,7 +150,6 @@ export class TouchPad {
         (x, y) => {
           x0 = x;
           y0 = y;
-          clearTimeout(this.aimTimer);
           this.hold(AIM, 0, 0);
           this.keys.press(code);
           el.classList.add('on');
@@ -168,7 +164,7 @@ export class TouchPad {
           this.keys.release(code);
           el.classList.remove('on');
           knob.style.transform = '';
-          this.aimTimer = window.setTimeout(() => this.hold(AIM, 0, 0), AIM_KEEP);
+          this.hold(AIM, 0, 0);
         },
       ),
     );

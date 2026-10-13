@@ -27,6 +27,7 @@ export const SMASH_Z = 1.75; // above this, a hit is an overhead
 export const SWING = 0.36; // s a released swing can make contact for
 export const LATE = 0.25; // s after the ball passed that a swing still reaches it (the others' lag)
 export const COOLDOWN = 0.4; // s between swings
+export const AIM_SPEED = 10; // m/s a shot's target moves with the arrows
 
 export const CHARGE_FULL = 0.75; // s holding the hit key to a full-power shot
 
@@ -34,7 +35,7 @@ export const SERVE_DELAY = 0.5; // s before the server may serve
 export const SERVE_FULL = 1; // s for the serve's power bar to fill
 export const SERVE_RED = 0.85; // above this much power, a serve risks a fault
 export const SERVE_HOLD = 3; // s a serve can be held before it goes by itself
-export const AIM_SPEED = 3.2; // m/s the serve's target moves
+export const SERVE_AIM_SPEED = 3.2; // m/s the serve's target moves, in its small box
 export const AUTO_SERVE = 8; // s before an idle server's serve goes by itself
 export const POINT_PAUSE = 1.8; // s between a point and the next serve
 

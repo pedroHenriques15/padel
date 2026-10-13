@@ -1,7 +1,7 @@
 // The match: players, the ball and padel's rules. Only the host runs it; everyone else draws the
 // View it sends.
 import * as C from './constants.ts';
-import { clampServeAim, defaultServeAim, shotKind, shotTarget } from './aim.ts';
+import { autoTarget, clampServeAim, clampShotAim, defaultServeAim, likelyShot, serveSpread, shotAim, shotKind, shotSpread, steer } from './aim.ts';
 import { clampBody, moveBody, type Limits } from './body.ts';
 import { botInputs, LEVELS } from './bot.ts';
 import { clamp, fwd, halfSign, hittableDistance, lerp, moveBall, other, rightX, slotX } from './court.ts';
@@ -44,8 +44,6 @@ export function newMatch(cfg: MatchConfig, seed = (Math.random() * 2 ** 32) >>> 
       charge: -1,
       chargeKind: 'drive',
       armed: null,
-      aimIx: 0,
-      aimIy: 0,
       prevD: Infinity,
       nearD: Infinity,
       nearAgo: Infinity,
@@ -56,6 +54,7 @@ export function newMatch(cfg: MatchConfig, seed = (Math.random() * 2 ** 32) >>> 
       diveY: 0,
       aimX: 0,
       aimY: 0,
+      aimed: false,
       emote: 0,
       emoteT: 0,
     };
@@ -140,6 +139,7 @@ export function setupServe(s: State): void {
     p.dive = p.down = 0;
     p.prevD = Infinity;
     p.nearD = Infinity;
+    p.aimed = false;
   }
   const aim = defaultServeAim(box, R);
   server.aimX = aim.x;
@@ -218,11 +218,9 @@ function control(s: State, p: Player, inp: TickInput, dt: number): void {
     p.emote = inp.emote;
     p.emoteT = C.EMOTE_TIME;
   }
-  p.aimIx = Math.sign(inp.aim?.[0] ?? 0);
-  p.aimIy = Math.sign(inp.aim?.[1] ?? 0);
 
   const serving = s.phase === 'serve' && s.players[s.server] === p;
-  const limits: Limits = { team: p.team, serveSide: serving ? s.serveSide : 0, frozen: p.charge >= 0, speed: p.speed };
+  const limits: Limits = { team: p.team, serveSide: serving ? s.serveSide : 0, speed: p.speed };
   const wasDiving = p.dive > 0;
   moveBody(p, inp.ix, inp.iy, inp.dive, limits, dt);
   // A remote player moves on their own screen: where they say they are counts, once they have
@@ -236,16 +234,40 @@ function control(s: State, p: Player, inp: TickInput, dt: number): void {
     p.charge = -1;
     p.armed = null;
   }
+  aimControl(s, p, inp, serving, dt);
 
   if (serving) serveControl(s, p, inp, dt);
   else swingControl(p, inp, dt);
 }
 
-// Hold the hit key (or K, for a slice) and the power bar fills; the arrows move the target in the
-// box; let go to serve.
+// The target. The arrows move it, and it stays where they leave it; until they do, it's the
+// automatic shot, or the serve's spot in the middle of the box. A friend's screen moves their own
+// and says where it is, once they have seen the latest serve's placement; the bots say where
+// theirs is.
+function aimControl(s: State, p: Player, inp: TickInput, serving: boolean, dt: number): void {
+  let t = { x: p.aimX, y: p.aimY };
+  if (inp.target && (!inp.pose || inp.pose.place === s.place)) {
+    t = inp.target;
+    p.aimed = true;
+  } else if (inp.pose) {
+    p.aimed = false;
+  }
+  if (!p.aimed) {
+    t = serving
+      ? defaultServeAim(s.boxSign, other(p.team))
+      : autoTarget(p.team, p.x, likelyShot(p.charge >= 0 && p.chargeKind === 'lob', Math.max(0, p.charge) / C.CHARGE_FULL, s.ball, p));
+  }
+  if (!inp.pose && !inp.target && inp.aim && (inp.aim[0] || inp.aim[1])) {
+    t = steer(t, p.team, inp.aim[0], inp.aim[1], serving ? C.SERVE_AIM_SPEED : C.AIM_SPEED, dt);
+    p.aimed = true;
+  }
+  if (p.aimed) t = serving ? clampServeAim(t.x, t.y, s.boxSign, other(p.team)) : clampShotAim(t.x, t.y, p.team);
+  p.aimX = t.x;
+  p.aimY = t.y;
+}
+
+// Hold the hit key (or K, for a slice) and the power bar fills; let go to serve.
 function serveControl(s: State, p: Player, inp: TickInput, dt: number): void {
-  const T = p.team;
-  const R = other(T);
   if (p.charge < 0) {
     if (s.timer < C.SERVE_DELAY) {
       // Too early: a tap does nothing, but a key held through the wait starts the serve.
@@ -262,16 +284,6 @@ function serveControl(s: State, p: Player, inp: TickInput, dt: number): void {
       return;
     }
   }
-  if (inp.serveAim && (!inp.pose || inp.pose.place === s.place)) {
-    p.aimX = inp.serveAim.x;
-    p.aimY = inp.serveAim.y;
-  } else if (!inp.pose) {
-    p.aimX += p.aimIx * rightX(T) * C.AIM_SPEED * dt;
-    p.aimY += p.aimIy * fwd(T) * C.AIM_SPEED * dt;
-  }
-  const a = clampServeAim(p.aimX, p.aimY, s.boxSign, R);
-  p.aimX = a.x;
-  p.aimY = a.y;
   const held = p.chargeKind === 'lob' ? inp.lobHold : inp.hold;
   if (held && p.charge < C.SERVE_HOLD) {
     p.charge += dt;
@@ -343,7 +355,11 @@ function shotDone(s: State, p: Player, shot: Shot, tag: string): void {
   s.offGlass = false;
   s.marked = false;
   s.sinceHit = 0;
-  for (const q of s.players) q.nearD = Infinity;
+  for (const q of s.players) {
+    q.nearD = Infinity;
+    // The hitter's team aim afresh for their next shot.
+    if (q.team === p.team) q.aimed = false;
+  }
   p.hitDone = true;
   p.charge = -1;
 }
@@ -352,7 +368,7 @@ function shotDone(s: State, p: Player, shot: Shot, tag: string): void {
 // slower, and stays low after the bounce.
 function serve(s: State, p: Player, power: number, slice: boolean): void {
   const red = Math.max(0, power - C.SERVE_RED) / (1 - C.SERVE_RED);
-  const wild = 0.22 + red * 0.95;
+  const wild = serveSpread(power);
   const tx = p.aimX + gauss(s) * wild;
   const ty = p.aimY + gauss(s) * wild;
   const speed = slice ? lerp(7, 12.5, power) : lerp(8, 17.5, power);
@@ -409,17 +425,9 @@ function hit(s: State, p: Player, d: number, power: number, kind: SwingKind | 'd
   const glass = s.offGlass && (shot === 'drive' || shot === 'lob');
   const incoming = Math.hypot(b.vx, b.vy, b.vz);
 
-  // How far off the target it may go, in metres: off-centre contact, power, a fast ball and a
-  // volley all add to it; a clean hit and a ball off the glass take from it.
-  // A volley at the feet is the hardest of all.
   const volley = s.bounces === 0;
-  let err = 0.2 + (1 - q) ** 2 * 1.7 * (0.7 + 0.6 * power) + power * 0.3 + Math.max(0, incoming - 10) * 0.04 + (volley ? 0.12 : 0) + (volley && b.z < 0.55 ? 0.7 : 0);
-  if (perfect) err *= 0.6;
-  if (glass) err *= 0.75;
-  if (shot === 'bandeja') err *= 0.7;
-  if (shot === 'portres') err *= 0.6;
-
-  const aim = shotTarget(t, p.aimIx, p.aimIy, b.x, shot);
+  const err = shotSpread(shot, q, power, incoming, volley, b.z < 0.55, perfect, glass);
+  const aim = shotAim(t, p.aimed, { x: p.aimX, y: p.aimY }, p.x, shot);
   const ys = -halfSign(t); // the y sign of the other half
   let tx = aim.x + gauss(s) * err;
   let depth = Math.max(0.5, Math.abs(aim.y) + gauss(s) * err * 1.1);
@@ -672,7 +680,6 @@ export function toView(s: State): View {
     serverId: server.id,
     serveSide: s.serveSide,
     boxSign: s.boxSign,
-    serveAim: { x: r2(server.aimX), y: r2(server.aimY) },
     hitTeam: s.lastHitTeam ?? -1,
     only: s.serveInFlight || s.serveReturn ? s.players[s.receiver].id : '',
     flight: s.serveInFlight,

@@ -16,8 +16,8 @@ A throwaway game: no server, no accounts, nothing to maintain.
 | Key | |
 |---|---|
 | WASD | Move. You always play up the screen. The ring round your feet lights up when the ball is in reach. |
-| Arrows | Aim, and nothing else: ←/→ the side, ↑ deep, ↓ short, as you hit; none, crosscourt. The target shows while you charge. |
-| Hold Space (or J) | Charge a shot: the longer, the harder. Let go to swing, or keep holding and you swing by yourself as the ball arrives. Charging plants your feet. A tap is the safe shot. |
+| Arrows | Aim, and nothing else: they move your target round the other half, any time, and it stays where you leave it. Until you move it, it's the crosscourt shot (dashed), and after each of your team's shots it goes back to that. The disc round it is where the ball may land: wider with power, and against a fast ball. |
+| Hold Space (or J) | Charge a shot: the longer, the harder. Let go to swing, or keep holding and you swing by yourself as the ball arrives. You run as fast while you charge. A tap is the safe shot. |
 | E (or K) | Lob (hold it for a higher one) |
 | Shift (or L) | Dive the way you run, for a ball out of reach; you're down for a moment after |
 | 1 to 4 | Vamos!, 😂, Sorry!, 👏 |
@@ -28,7 +28,7 @@ On a phone or a tablet, held sideways, the controls are on the screen:
 | Touch | |
 |---|---|
 | Left half | Move: put your thumb down anywhere and slide it, and a stick appears under it. |
-| Hit | Hold to charge and let go to swing, as with Space. Slide your thumb while you hold it to aim: left or right, up deep, down short. |
+| Hit | Hold to charge and let go to swing, as with Space. Slide your thumb while you hold it to move your target, as the arrows do. |
 | Lob | The same, for a lob, or a sliced serve. |
 | Dive | Dive the way the stick points. |
 | 💬 | Vamos!, 😂, Sorry!, 👏 |
@@ -36,8 +36,8 @@ On a phone or a tablet, held sideways, the controls are on the screen:
 On Android the game goes full screen and stays sideways; on an iPhone, turn it.
 
 **Serving:** walk along the baseline with A/D, then hold Space: the power bar fills, and its red
-top risks a fault. The arrows move your target in the box: the T, the body, or wide into the
-glass. Let go to serve. E (or K) serves a slice, which stays low after the bounce.
+top risks a fault. The arrows move your target in the box, before or while you charge: the T, the
+body, or wide into the glass. Let go to serve. E (or K) serves a slice, which stays low after the bounce.
 
 **Overheads:** on a high ball, a tap is a bandeja (safe, deep), a charge a smash, and a full
 charge from near the net a *por tres*: it bounces out of the court, a winner unless they get to

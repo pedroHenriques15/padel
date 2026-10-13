@@ -1,6 +1,6 @@
-// How a player moves: running with a little acceleration, standing still while charging (the
-// arrows aim then), and the dive. The host moves everyone with it, and a remote player moves
-// themselves with it on their own screen, so both agree.
+// How a player moves: running with a little acceleration, at full speed whether charging or not,
+// and the dive. The host moves everyone with it, and a remote player moves themselves with it on
+// their own screen, so both agree.
 import * as C from './constants.ts';
 import { clamp, fwd, halfSign, rightX } from './court.ts';
 import type { Team } from './types.ts';
@@ -20,7 +20,6 @@ export interface Body {
 export interface Limits {
   team: Team;
   serveSide: number; // waiting to serve: the x sign of their side, else 0
-  frozen: boolean; // charging a serve or a shot: they plant their feet, and the arrows aim
   speed: number;
 }
 
@@ -64,9 +63,8 @@ export function moveBody(b: Body, ix: number, iy: number, diveKey: boolean, L: L
       b.vx = b.diveX * L.speed * C.DIVE_SPEED;
       b.vy = b.diveY * L.speed * C.DIVE_SPEED;
     } else {
-      const top = L.frozen ? 0 : L.speed;
-      const tx = wx * top;
-      const ty = wy * top;
+      const tx = wx * L.speed;
+      const ty = wy * L.speed;
       const dx = tx - b.vx;
       const dy = ty - b.vy;
       const gap = Math.hypot(dx, dy);
