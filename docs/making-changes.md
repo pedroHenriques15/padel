@@ -85,8 +85,11 @@ to dive, 1-4 for emotes. Keep the arrows for aiming.
 4. **`src/sim/sim.ts`, `control()`** or what it calls: what it does.
 5. **`src/predict.ts`**: if it changes how a player moves, `Me.update` has to do the same on a
    friend's screen, with the same `moveBody`.
-6. **The help**: `howTo()` and `gameBar()` in `src/main.ts`, the serve banner in `src/render.ts` if
-   it matters for serving, and the README's keys table.
+6. **`src/touch.ts`**: a touch control that presses the same key: `button` for a key that's only
+   pressed, `swing` for one that charges and aims as the thumb slides. Place it in `src/style.css`,
+   in the right-hand corner by the others.
+7. **The help**: `howTo()` (both lists) and `gameBar()` in `src/main.ts`, the serve banner in
+   `src/render.ts` (both texts) if it matters for serving, and the README's two tables.
 
 ## A new field in the view
 
@@ -123,6 +126,7 @@ The `View` goes to every friend 30 times a second.
 
 1. Add its text to `EMOTES` in `src/sim/sim.ts`.
 2. Add its keys to `EMOTES` in `src/input.ts`, and change the `% 4` that turns a key into a number.
+   The touch menu gets a button by itself, and presses `Digit1` on, so keep the digits first.
 3. Raise the `4`s: the clamp on `ek` in `cleanControls` and the `1`-`4` check in `control()`.
 4. The help, and the README.
 

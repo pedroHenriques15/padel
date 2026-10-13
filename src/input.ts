@@ -1,5 +1,5 @@
 // The keyboard. Presses are counted, so a quick tap between two ticks (or two network messages)
-// is never lost: the host compares counts.
+// is never lost: the host compares counts. The touch controls (touch.ts) press the same keys.
 import type { Controls } from './sim/controls.ts';
 import type { SwingKind } from './sim/types.ts';
 
@@ -16,7 +16,7 @@ const HIT = ['Space', 'KeyJ'];
 const LOB = ['KeyE', 'KeyK'];
 const DIVE = ['ShiftLeft', 'ShiftRight', 'KeyL'];
 const EMOTES = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Numpad1', 'Numpad2', 'Numpad3', 'Numpad4'];
-const GAME_KEYS = new Set([...LEFT, ...RIGHT, ...UP, ...DOWN, ...AIM_LEFT, ...AIM_RIGHT, ...AIM_UP, ...AIM_DOWN, ...HIT, ...LOB, ...DIVE, ...EMOTES]);
+export const GAME_KEYS = new Set([...LEFT, ...RIGHT, ...UP, ...DOWN, ...AIM_LEFT, ...AIM_RIGHT, ...AIM_UP, ...AIM_DOWN, ...HIT, ...LOB, ...DIVE, ...EMOTES]);
 
 export class Keyboard {
   private down = new Set<string>();
@@ -34,23 +34,37 @@ export class Keyboard {
       if (!this.enabled || (e.target instanceof HTMLElement && e.target.closest('input, select, textarea'))) return;
       if (!GAME_KEYS.has(e.code)) return;
       e.preventDefault();
-      if (!e.repeat) {
-        if (HIT.includes(e.code) || LOB.includes(e.code)) {
-          if (HIT.includes(e.code)) this.hits++;
-          else this.lobs++;
-          this.pressedAt = performance.now();
-          this.pressedKind = HIT.includes(e.code) ? 'drive' : 'lob';
-        }
-        if (DIVE.includes(e.code)) this.dives++;
-        if (EMOTES.includes(e.code)) {
-          this.emotes++;
-          this.emote = (EMOTES.indexOf(e.code) % 4) + 1;
-        }
-      }
-      this.down.add(e.code);
+      if (e.repeat) this.down.add(e.code);
+      else this.press(e.code);
     });
-    addEventListener('keyup', (e) => this.down.delete(e.code));
-    addEventListener('blur', () => this.down.clear());
+    addEventListener('keyup', (e) => this.release(e.code));
+    addEventListener('blur', () => this.clear());
+  }
+
+  // A key goes down, on the keyboard or on the screen. A key already down doesn't count again.
+  press(code: string): void {
+    if (!this.enabled || this.down.has(code)) return;
+    if (HIT.includes(code) || LOB.includes(code)) {
+      if (HIT.includes(code)) this.hits++;
+      else this.lobs++;
+      this.pressedAt = performance.now();
+      this.pressedKind = HIT.includes(code) ? 'drive' : 'lob';
+    }
+    if (DIVE.includes(code)) this.dives++;
+    if (EMOTES.includes(code)) {
+      this.emotes++;
+      this.emote = (EMOTES.indexOf(code) % 4) + 1;
+    }
+    this.down.add(code);
+  }
+
+  release(code: string): void {
+    this.down.delete(code);
+  }
+
+  // Lets go of every key, as when the page loses the focus.
+  clear(): void {
+    this.down.clear();
   }
 
   private any(codes: string[]): boolean {

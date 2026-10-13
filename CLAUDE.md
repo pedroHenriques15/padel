@@ -1,11 +1,11 @@
 # CLAUDE.md
 
 Padel is a padel game played in the browser, 1v1, 1v2 or 2v2 between friends on their own
-computers, keyboard only. It is TypeScript on a 2D canvas, with PeerJS (WebRTC) for the rooms,
-built with Vite and served from GitHub Pages. There is no server and no accounts, and no asset
-files either: the court is drawn with canvas paths and every sound is synthesized. The README
-promises "nothing to maintain", so treat that as a design constraint: don't add a backend, a build
-step or a dependency without a strong reason.
+computers or phones: on a keyboard, or with touch controls on the screen. It is TypeScript on a 2D
+canvas, with PeerJS (WebRTC) for the rooms, built with Vite and served from GitHub Pages. There is
+no server and no accounts, and no asset files either: the court is drawn with canvas paths and every
+sound is synthesized. The README promises "nothing to maintain", so treat that as a design
+constraint: don't add a backend, a build step or a dependency without a strong reason.
 
 - `README.md`: the game as a player sees it (controls, serving, shots, the rules).
 - `docs/architecture.md`: how it fits together: the match, the loop, the network.
@@ -49,6 +49,10 @@ npm run deploy       # tests, builds, force-pushes dist/ to gh-pages: it publish
   through PeerJS's public server, so this needs internet access.
 - With no room, the home and lobby screens show four bots playing best of three sets behind the
   panels.
+- A phone or tablet (a coarse pointer), or any screen once it's touched, gets the touch controls;
+  `?touch` shows them with a mouse. To try them in Playwright, use a context with `hasTouch` and
+  `isMobile`, sideways (844x390 is an iPhone), and send real touches over CDP
+  (`Input.dispatchTouchEvent`), which can hold the stick and Hit at once.
 
 ## The two halves
 
@@ -58,7 +62,8 @@ longer load it.
 
 **The browser** is everything else: `src/render.ts` (the canvas), `src/session.ts` (PeerJS),
 `src/predict.ts` (a friend's own figure), `src/main.ts` (screens, the loop and the glue),
-`src/input.ts` and `src/audio.ts`.
+`src/input.ts` (the keyboard), `src/touch.ts` (the touch controls), `src/dom.ts` (`h()`) and
+`src/audio.ts`.
 
 How a match runs:
 
@@ -93,13 +98,14 @@ How a match runs:
   towards/away from the net, whichever side they play. Team B's screen is the court turned round
   (`flip` in `render.ts`), so everyone plays up the screen.
 - **WASD moves; the arrows only aim.** The owner asked for that after the arrows both moved and
-  aimed. Never let the arrows move a player.
+  aimed. Never let the arrows move a player. On a touch screen it's the same split: the stick on the
+  left moves, and sliding the thumb on a held Hit or Lob only aims.
 - Units: seconds and m/s in the match (`DT = 1/60`, every timer on `Player` and `State`);
   milliseconds only in the browser (`performance.now()`, `INTERP_MS`, `?lag`).
 - The match reports what happened through counters, never by calling out: `s.ev` (for sounds),
   `s.shot` (the latest shot's speed and name) and `s.mark` (where the ball last landed). The
   browser plays or draws a counter when it goes up.
-- Build DOM with the `h()` helper in `main.ts`, which only ever sets text. Never use `innerHTML`:
+- Build DOM with the `h()` helper in `src/dom.ts`, which only ever sets text. Never use `innerHTML`:
   player names come from other people. On the canvas, names go through `fillText`.
 - The host trusts nothing a client sends. `cleanControls` (`src/sim/controls.ts`) clamps every
   number, `cleanName` cuts names short, and `configure` and `sit` check what they're given. Any new
@@ -123,7 +129,17 @@ How a match runs:
   `src/audio.ts` plays index `i` when number `i` goes up. Add a counter at the end of both, in the
   same order.
 - **The emotes are numbered in three places**: the keys in `src/input.ts`, the clamp in
-  `cleanControls`, and the 1-4 check in `control()` in `sim.ts`, next to `EMOTES` for the text.
+  `cleanControls`, and the 1-4 check in `control()` in `sim.ts`, next to `EMOTES` for the text. The
+  touch menu makes a button for each of `EMOTES` and presses `Digit1` on.
+- **The touch controls press the keyboard's keys.** `src/touch.ts` calls `keys.press` and
+  `keys.release` with the same codes (WASD, the arrows, Space, E, Shift, the digits), so everything
+  after `input.ts` is the same for both, and the network and the match don't know. A new key needs
+  a touch control too. A slide's aim stays 0.5 s after the thumb lifts (`AIM_KEEP`), because the
+  swing that follows reads it.
+- **The frame is as wide as the screen.** `render.ts` draws a frame 800 tall and at least 1280 wide,
+  wider on a wider screen, so the court keeps its size. `W` changes when the canvas does, so draw
+  anything centred at `W / 2`, never at a fixed x. On a short screen the HUD, names and floaters are
+  drawn up to 1.45 times larger (`zoom`), and the banners shrink to stay clear of the score.
 - **Movement and aim are shared with the screen.** `src/sim/body.ts` runs on the host and on a
   friend's screen, and `src/sim/aim.ts` draws the target the player sees. A change there changes
   both, which is the point; keep them free of anything only the host knows.

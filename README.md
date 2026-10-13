@@ -1,7 +1,7 @@
 # Padel
 
-Padel in the browser with friends: 1v1, 1v2 or 2v2, online, keyboard only. Empty places are
-played by bots, so it also works alone.
+Padel in the browser with friends: 1v1, 1v2 or 2v2, online, on a keyboard or a phone. Empty
+places are played by bots, so it also works alone.
 
 A throwaway game: no server, no accounts, nothing to maintain.
 
@@ -22,6 +22,18 @@ A throwaway game: no server, no accounts, nothing to maintain.
 | Shift (or L) | Dive the way you run, for a ball out of reach; you're down for a moment after |
 | 1 to 4 | Vamos!, 😂, Sorry!, 👏 |
 | M | Sound on/off |
+
+On a phone or a tablet, held sideways, the controls are on the screen:
+
+| Touch | |
+|---|---|
+| Left half | Move: put your thumb down anywhere and slide it, and a stick appears under it. |
+| Hit | Hold to charge and let go to swing, as with Space. Slide your thumb while you hold it to aim: left or right, up deep, down short. |
+| Lob | The same, for a lob, or a sliced serve. |
+| Dive | Dive the way the stick points. |
+| 💬 | Vamos!, 😂, Sorry!, 👏 |
+
+On Android the game goes full screen and stays sideways; on an iPhone, turn it.
 
 **Serving:** walk along the baseline with A/D, then hold Space: the power bar fills, and its red
 top risks a fault. The arrows move your target in the box: the T, the body, or wide into the
@@ -57,7 +69,7 @@ Sets are six games by two, with a tie-break at 6-6.
 - `src/session.ts`: rooms, the host and the others. `src/predict.ts`: a player's own figure on
   their own screen.
 - `src/render.ts`: the court in perspective, on a canvas. `src/main.ts`: the screens and the loop.
-  `src/input.ts`, `src/audio.ts`: the keyboard and the sounds.
+  `src/input.ts`, `src/touch.ts`, `src/audio.ts`: the keyboard, the touch controls and the sounds.
 
 How it fits together, the network messages included, is in [docs/architecture.md](docs/architecture.md).
 How to tune the feel, add a shot, a key or a format, and what to watch out for is in
@@ -68,7 +80,7 @@ The tests run the TypeScript straight in Node, which needs Node 22.18 or later.
 
 ```sh
 npm install
-npm run dev      # http://localhost:5173; ?debug exposes window.__padel, ?lag=150 delays a friend
+npm run dev      # http://localhost:5173; ?debug exposes window.__padel, ?lag=150 delays a friend, ?touch shows the touch controls
 npm test         # the rules, serving, shots, the dive, scoring; bots playing whole matches
 npm run check    # the type check (Node runs the tests without one)
 npm run build

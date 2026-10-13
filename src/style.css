@@ -22,19 +22,24 @@ body {
   color: var(--text);
   font: 15px/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
+/* dvh is the height a phone's browser leaves for the page, which vh isn't. */
 #app {
   position: relative;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   display: grid;
   place-items: center;
 }
 
+/* The full width, and the full height unless that's narrower than the court's 16:10 frame. */
 #court {
-  width: min(100vw, 160vh);
+  width: 100vw;
   height: min(62.5vw, 100vh);
+  height: min(62.5vw, 100dvh);
   display: block;
 }
 
@@ -46,14 +51,28 @@ body:not(.in-game) #court {
   position: absolute;
   inset: 0;
   display: grid;
-  place-items: center;
   pointer-events: none;
-  padding: 16px;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   overflow: auto;
 }
 
 #ui > * {
   pointer-events: auto;
+}
+
+/* Centred, but a panel taller than the screen starts at the top, where it can be scrolled from. */
+#ui > .panel {
+  margin: auto;
+}
+
+body.in-game {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+body.in-game #court {
+  touch-action: none;
 }
 
 .panel {
@@ -143,6 +162,7 @@ button {
   border-radius: 10px;
   padding: 11px 16px;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 button:hover:not(:disabled) {
@@ -431,6 +451,25 @@ h2.t1 {
   }
 }
 
+/* A phone turned sideways: the panels tighten up. */
+@media (max-height: 500px) {
+  .panel {
+    padding: 18px 20px;
+    gap: 10px;
+  }
+  h1 {
+    font-size: 40px;
+  }
+}
+
+/* Safari zooms the page into an input whose text is under 16px. */
+@media (pointer: coarse) {
+  input,
+  select {
+    font-size: 16px;
+  }
+}
+
 @media (max-width: 520px) {
   .teams {
     grid-template-columns: 1fr;
@@ -440,5 +479,198 @@ h2.t1 {
   }
   .panel {
     padding: 20px;
+  }
+}
+
+/* On a touch screen the bar goes to the top right, out of the thumbs' way. */
+.bar .fs {
+  display: none;
+}
+
+body.touch .bar {
+  top: max(10px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  bottom: auto;
+  padding: 4px;
+  gap: 4px;
+}
+
+body.touch .bar .keys,
+body.touch .bar .where {
+  display: none;
+}
+
+body.touch .bar .fs {
+  display: inline-block;
+}
+
+:fullscreen body.touch .bar .fs {
+  display: none;
+}
+
+/* The touch controls, over the court in a match: the stick on the left half, the buttons in the
+   right-hand corner. */
+.pad {
+  --l: max(16px, env(safe-area-inset-left));
+  --r: max(16px, env(safe-area-inset-right));
+  --b: max(14px, env(safe-area-inset-bottom));
+  position: absolute;
+  inset: 0;
+  display: none;
+  pointer-events: none;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+body.touch.in-game.seated:not(.over) .pad {
+  display: block;
+}
+
+.pad > * {
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.pad .run {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+}
+
+.pad .stick {
+  position: absolute;
+  left: calc(var(--l) + 62px);
+  top: calc(100% - var(--b) - 62px);
+  width: 124px;
+  height: 124px;
+  margin: -62px 0 0 -62px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  background: rgba(8, 12, 22, 0.3);
+  opacity: 0.55;
+}
+
+.pad .stick.on {
+  opacity: 1;
+}
+
+.pad .stick .knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 54px;
+  height: 54px;
+  margin: -27px 0 0 -27px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.pad .btn {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(8, 12, 22, 0.45);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+/* A little more room to land on than shows. */
+.pad .btn::before {
+  content: '';
+  position: absolute;
+  inset: -10px;
+  border-radius: 50%;
+}
+
+.pad .btn.on {
+  background: rgba(229, 255, 58, 0.28);
+  border-color: var(--accent);
+}
+
+.pad .hit {
+  right: var(--r);
+  bottom: var(--b);
+  width: 100px;
+  height: 100px;
+  font-size: 18px;
+  border-color: rgba(229, 255, 58, 0.6);
+}
+
+.pad .lob {
+  right: calc(var(--r) + 122px);
+  bottom: calc(var(--b) + 8px);
+  width: 70px;
+  height: 70px;
+}
+
+.pad .dive {
+  right: calc(var(--r) + 15px);
+  bottom: calc(var(--b) + 122px);
+  width: 70px;
+  height: 70px;
+}
+
+/* Where a held Hit or Lob aims. */
+.pad .btn .knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0;
+}
+
+.pad .btn.on .knob {
+  opacity: 0.9;
+}
+
+.pad .emote {
+  position: absolute;
+  top: max(58px, calc(env(safe-area-inset-top) + 48px));
+  right: var(--r);
+  display: flex;
+  flex-direction: row-reverse;
+  gap: 6px;
+}
+
+.pad .emote button {
+  background: rgba(8, 12, 22, 0.7);
+  padding: 7px 11px;
+}
+
+.pad .emote .list {
+  display: none;
+  gap: 6px;
+}
+
+.pad .emote.open .list {
+  display: flex;
+}
+
+.rotate {
+  display: none;
+}
+
+@media (orientation: portrait) {
+  body.touch.in-game:not(.over) .rotate {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-content: center;
+    gap: 16px;
+    padding: 24px;
+    text-align: center;
+    font-size: 18px;
+    background: var(--bg);
   }
 }

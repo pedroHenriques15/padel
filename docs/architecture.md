@@ -23,6 +23,8 @@ For the game as a player sees it, read the README. For how to change things, rea
 | `src/main.ts` | browser | The screens, the frame loop, the player's overlay, and the glue between all of it |
 | `src/render.ts` | browser | The court in perspective on a canvas, the players, the ball, the HUD |
 | `src/input.ts` | browser | The keyboard: held keys, plus presses counted |
+| `src/touch.ts` | browser | The touch controls: a stick for the left thumb, Hit and Lob that aim as the thumb slides, Dive, the emotes. They press the keyboard's keys |
+| `src/dom.ts` | browser | `h()`, which builds the screens' elements and only ever sets text |
 | `src/audio.ts` | browser | Every sound, synthesized with Web Audio |
 
 The **sim** files never touch the DOM, so `node --test` can load them. The tests in
@@ -293,6 +295,10 @@ the room closes and everyone goes back to the home screen.
 
 - **One fixed camera** behind the near baseline (`EYE`, `FOCAL`), projected by hand in `proj()`.
   Team B's screens draw the court turned round (`flip`), so everyone plays up the screen.
+- **A frame as wide as the screen.** The frame is 800 tall and at least 1280 wide; on a wider
+  screen (a phone held sideways) it's wider, and shows more round the court. `fit()` sizes the
+  canvas to the screen's own pixels whenever the page changes size. On a short screen the HUD, the
+  names, the emotes and the shot speeds are drawn up to 1.45 times larger (`zoom`).
 - **Three layers drawn once**: the floor, lines, far glass and side walls; the net; the near frame.
   Each frame puts them down, with the players, the ball and the net sorted far to near between.
 - **The player's own overlay**: the serve box highlighted, the target (pulsing, in their colour),

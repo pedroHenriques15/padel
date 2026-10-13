@@ -1,6 +1,7 @@
 import './style.css';
 import { playEvents, resetEvents, toggleMute, unlockAudio } from './audio.ts';
-import { Keyboard } from './input.ts';
+import { h } from './dom.ts';
+import { GAME_KEYS, Keyboard } from './input.ts';
 import { Me } from './predict.ts';
 import { Renderer, TEAM_NAME, type Overlay } from './render.ts';
 import { ClientSession, cleanName, HostSession, MODE_SEATS, mySeat, seatTeam, type Lobby, type Mode, type SeatKey } from './session.ts';
@@ -9,31 +10,70 @@ import { DT } from './sim/constants.ts';
 import { sideOf } from './sim/court.ts';
 import { FORMATS, newMatch, step, toView } from './sim/sim.ts';
 import type { Difficulty, FormatKey, State, Team, View } from './sim/types.ts';
+import { TouchPad } from './touch.ts';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#court')!;
 const ui = document.querySelector<HTMLDivElement>('#ui')!;
 const renderer = new Renderer(canvas);
 const keys = new Keyboard();
+const pad = new TouchPad(keys);
 const me = new Me();
 const debug = new URLSearchParams(location.search).has('debug');
 
 let session: HostSession | ClientSession | null = null;
 let notice = '';
 
-// A tiny element builder that only ever sets text, never HTML: names come from other people.
-type Child = Node | string | null | false;
-function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: Record<string, unknown> = {}, ...kids: Child[]): HTMLElementTagNameMap[K] {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(props)) {
-    if (v === undefined || v === false) continue;
-    if (k.startsWith('on')) el.addEventListener(k.slice(2), v as EventListener);
-    else if (k === 'class') el.className = String(v);
-    else if (k in el) (el as unknown as Record<string, unknown>)[k] = v;
-    else el.setAttribute(k, String(v));
-  }
-  for (const c of kids) if (c) el.append(c);
-  return el;
+// The touch controls show on a phone or a tablet, and on any screen once it's touched; a key
+// pressed in a match hides them again. ?touch shows them from the start.
+let touch = false;
+function setTouch(on: boolean): void {
+  touch = on;
+  document.body.classList.toggle('touch', on);
 }
+setTouch(matchMedia('(pointer: coarse)').matches || new URLSearchParams(location.search).has('touch'));
+addEventListener('pointerdown', (e) => e.pointerType === 'touch' && !touch && setTouch(true));
+
+// A phone plays full screen and sideways, where the browser lets a page do that (an iPhone's
+// doesn't: it's asked to turn instead).
+const canFullscreen = () => !!document.documentElement.requestFullscreen;
+function fullscreen(): void {
+  if (!canFullscreen() || document.fullscreenElement) return;
+  const turn = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
+  document.documentElement
+    .requestFullscreen({ navigationUI: 'hide' })
+    .then(() => turn.lock?.('landscape'))
+    .catch(() => {});
+}
+
+// A phone in a room keeps its screen on: one that locks stops playing, and a host's closes the
+// room for everyone.
+let awake: WakeLockSentinel | null = null;
+let asking = false;
+function keepAwake(): void {
+  const want = !!session && !document.hidden;
+  if (want && !awake && !asking && 'wakeLock' in navigator) {
+    asking = true;
+    navigator.wakeLock
+      .request('screen')
+      .then((w) => {
+        awake = w;
+        w.onrelease = () => (awake = null);
+        keepAwake();
+      })
+      .catch(() => {})
+      .finally(() => (asking = false));
+  } else if (!want && awake) void awake.release();
+}
+
+// In a match, a phone held upright is asked to turn it: the court needs the width.
+const rotate = h(
+  'div',
+  { class: 'rotate' },
+  h('p', {}, 'Turn your phone sideways to play.'),
+  canFullscreen() && h('button', { class: 'primary', onclick: fullscreen }, 'Play full screen'),
+);
+document.querySelector('#app')!.append(pad.el, rotate);
+pad.el.addEventListener('pointerup', unlockAudio);
 
 function savedName(): string {
   try {
@@ -77,6 +117,7 @@ function homeScreen(): HTMLElement {
 
   const host = async () => {
     unlockAudio();
+    if (touch) fullscreen();
     busy(true);
     err.textContent = 'Opening a room…';
     try {
@@ -97,6 +138,7 @@ function homeScreen(): HTMLElement {
       return;
     }
     unlockAudio();
+    if (touch) fullscreen();
     busy(true);
     err.textContent = 'Joining…';
     try {
@@ -139,23 +181,34 @@ function homeScreen(): HTMLElement {
 }
 
 function howTo(): HTMLElement {
-  return h(
-    'details',
-    { class: 'how' },
-    h('summary', {}, 'How to play'),
-    h(
-      'ul',
-      {},
-      h('li', {}, h('b', {}, 'Move'), ' WASD. You always play up the screen. The ring round your feet lights up when the ball is in reach.'),
-      h('li', {}, h('b', {}, 'Aim'), ' The arrows, which only aim: ←/→ the side, ↑ deep, ↓ short, as you hit. With none, it goes crosscourt. Your target shows on the other side while you charge.'),
-      h('li', {}, h('b', {}, 'Serve'), ' Walk along the baseline with A/D, then hold Space: the power bar fills (the red top risks a fault) and the arrows move your target in the box. Let go to serve. E (or K) serves a slice, which stays low.'),
-      h('li', {}, h('b', {}, 'Hit'), ' Hold Space as the ball comes: the longer, the harder. Let go to swing, or keep holding and you swing by yourself as it arrives. Charging plants your feet, so get to the ball first. A quick tap is the safe shot; the closer the ball passes, the better.'),
-      h('li', {}, h('b', {}, 'Overheads'), ' A high ball: tap for a bandeja, charge for a smash; fully charged from near the net it bounces out of the court: por tres!'),
-      h('li', {}, h('b', {}, 'Lob, dive, emotes'), ' E (or K) lobs; hold it for a higher one. Shift (or L) dives the way you run, for a ball out of reach. 1 to 4: Vamos!, 😂, Sorry!, 👏'),
-      h('li', {}, h('b', {}, 'Rules'), ' Serve underhand, diagonally, into the box; a serve that clips the net and lands in is a let. The ball must bounce once in the other half before it touches a wall; after that it can come off the glass, and you play it before it bounces twice. Golden point at 40-40.'),
-      h('li', {}, h('b', {}, 'Sound'), ' M mutes.'),
-    ),
+  const item = (what: string, how: string) => h('li', {}, h('b', {}, what), ' ', how);
+  const overheads = item('Overheads', 'A high ball: tap for a bandeja, charge for a smash; fully charged from near the net it bounces out of the court: por tres!');
+  const rules = item(
+    'Rules',
+    'Serve underhand, diagonally, into the box; a serve that clips the net and lands in is a let. The ball must bounce once in the other half before it touches a wall; after that it can come off the glass, and you play it before it bounces twice. Golden point at 40-40.',
   );
+  const items = touch
+    ? [
+        item('Move', 'Put your left thumb anywhere on the left half and slide it: a stick appears under it. You always play up the screen. The ring round your feet lights up when the ball is in reach.'),
+        item('Hit', 'Hold Hit as the ball comes: the longer, the harder. Let go to swing, or keep holding and you swing by yourself as it arrives. Holding plants your feet, so get to the ball first. A quick tap is the safe shot; the closer the ball passes, the better.'),
+        item('Aim', 'While you hold Hit, slide your thumb: left or right for the side, up deep, down short. Without, it goes crosscourt. Your target shows on the other side.'),
+        item('Serve', 'Walk along the baseline with the stick, then hold Hit: the power bar fills (the red top risks a fault), and sliding your thumb moves your target in the box. Let go to serve. Lob serves a slice, which stays low.'),
+        overheads,
+        item('Lob, dive, emotes', 'Lob aims as Hit does; hold it for a higher one. Dive dives the way the stick points, for a ball out of reach. 💬: Vamos!, 😂, Sorry!, 👏'),
+        rules,
+        item('Phone', 'Turn it sideways.'),
+      ]
+    : [
+        item('Move', 'WASD. You always play up the screen. The ring round your feet lights up when the ball is in reach.'),
+        item('Aim', 'The arrows, which only aim: ←/→ the side, ↑ deep, ↓ short, as you hit. With none, it goes crosscourt. Your target shows on the other side while you charge.'),
+        item('Serve', 'Walk along the baseline with A/D, then hold Space: the power bar fills (the red top risks a fault) and the arrows move your target in the box. Let go to serve. E (or K) serves a slice, which stays low.'),
+        item('Hit', 'Hold Space as the ball comes: the longer, the harder. Let go to swing, or keep holding and you swing by yourself as it arrives. Charging plants your feet, so get to the ball first. A quick tap is the safe shot; the closer the ball passes, the better.'),
+        overheads,
+        item('Lob, dive, emotes', 'E (or K) lobs; hold it for a higher one. Shift (or L) dives the way you run, for a ball out of reach. 1 to 4: Vamos!, 😂, Sorry!, 👏'),
+        rules,
+        item('Sound', 'M mutes.'),
+      ];
+  return h('details', { class: 'how' }, h('summary', {}, 'How to play'), h('ul', {}, ...items));
 }
 
 function lobbyScreen(lobby: Lobby, you: string): HTMLElement {
@@ -222,7 +275,7 @@ function lobbyScreen(lobby: Lobby, you: string): HTMLElement {
       lobby.mode === '1v2' && h('label', {}, assist, ' Help the lone player'),
     ),
     h('p', { class: 'hint' }, 'Empty places are played by bots. ', watching.length ? `Watching: ${watching.map((m) => m.name).join(', ')}.` : ''),
-    isHost ? h('button', { class: 'primary', onclick: () => (session as HostSession).start() }, mine ? 'Start the match' : 'Start (you watch)') : h('p', { class: 'wait' }, 'Waiting for the host to start…'),
+    isHost ? h('button', { class: 'primary', onclick: start }, mine ? 'Start the match' : 'Start (you watch)') : h('p', { class: 'wait' }, 'Waiting for the host to start…'),
     h('button', { class: 'ghost', onclick: leave }, 'Leave the room'),
     howTo(),
   );
@@ -233,9 +286,10 @@ function gameBar(lobby: Lobby): HTMLElement {
   return h(
     'div',
     { class: 'bar' },
-    h('span', {}, 'Room ', h('b', {}, lobby.code)),
+    h('span', { class: 'where' }, 'Room ', h('b', {}, lobby.code)),
     h('span', { class: 'keys' }, 'WASD move · arrows aim · hold Space: charge · E lob · Shift dive · 1-4 emotes'),
     mute,
+    canFullscreen() && h('button', { class: 'small ghost fs', onclick: fullscreen }, 'Full screen'),
     h('button', { class: 'small ghost', onclick: leave }, 'Leave'),
   );
 }
@@ -278,9 +332,14 @@ function overScreen(v: View): HTMLElement {
     h('p', { class: 'final' }, finalScore(v)),
     statsTable(v),
     isHost
-      ? h('div', { class: 'row' }, h('button', { class: 'primary', onclick: () => (session as HostSession).start() }, 'Play again'), h('button', { onclick: () => (session as HostSession).backToLobby() }, 'Back to the lobby'))
+      ? h('div', { class: 'row' }, h('button', { class: 'primary', onclick: start }, 'Play again'), h('button', { onclick: () => (session as HostSession).backToLobby() }, 'Back to the lobby'))
       : h('p', { class: 'wait' }, 'Waiting for the host…'),
   );
+}
+
+function start(): void {
+  if (touch) fullscreen();
+  (session as HostSession).start();
 }
 
 function leave(): void {
@@ -301,7 +360,12 @@ function render(): void {
   const you = session?.you ?? '';
   keys.enabled = !!lobby?.playing;
   overShown = false;
+  if (!lobby?.playing) pad.reset();
   document.body.classList.toggle('in-game', !!lobby?.playing);
+  document.body.classList.toggle('seated', !!lobby?.playing && !!mySeat(lobby, you));
+  document.body.classList.remove('over');
+  if (!session && document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+  keepAwake();
   if (!session || !lobby) ui.replaceChildren(homeScreen());
   else if (!lobby.playing) ui.replaceChildren(lobbyScreen(lobby, you));
   else {
@@ -391,10 +455,12 @@ function frame(now: number): void {
   if (v && lobby) {
     const seat = mySeat(lobby, session!.you);
     const meId = v.players.some((p) => p.id === session!.you) ? session!.you : null;
-    renderer.draw(v, { viewTeam: seat ? seatTeam(seat) : 0, me: meId, hud: true, overlay: ov }, now);
+    renderer.draw(v, { viewTeam: seat ? seatTeam(seat) : 0, me: meId, hud: true, overlay: ov, touch }, now);
     playEvents(v.ev);
     if (v.phase === 'over' && !overShown) {
       overShown = true;
+      pad.reset();
+      document.body.classList.add('over');
       ui.append(overScreen(v));
     }
     if (v.phase !== 'over' && overShown) render();
@@ -405,11 +471,23 @@ function frame(now: number): void {
 }
 
 addEventListener('keydown', (e) => {
+  if (touch && playing() && GAME_KEYS.has(e.code)) setTouch(false);
   if (e.code === 'KeyM' && !(e.target instanceof HTMLInputElement)) {
     const b = [...ui.querySelectorAll('button')].find((x) => x.textContent?.startsWith('Sound'));
     if (b) b.click();
     else toggleMute();
   }
+});
+
+// A phone that locks or changes app stops drawing, and so stops sending its keys: let go of them
+// first, or the host would go on holding them.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    pad.reset();
+    keys.clear();
+    if (session instanceof ClientSession && playing()) session.sendControls(keys.read());
+  }
+  keepAwake();
 });
 
 render();

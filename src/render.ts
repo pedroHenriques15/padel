@@ -5,8 +5,10 @@ import { halfSign } from './sim/court.ts';
 import { EMOTES, FORMATS } from './sim/sim.ts';
 import type { Team, View, ViewPlayer } from './sim/types.ts';
 
-export const W = 1280;
-export const H = 800;
+// The frame is H tall, and as wide as the canvas on the page, at least 1.6 times H: the court keeps
+// its size, and a wider screen shows more round it.
+let W = 1280;
+const H = 800;
 
 const TEAM_COLOR = ['#ff7a45', '#36d6c3'];
 const TEAM_DARK = ['#b8471c', '#1a8f82'];
@@ -170,12 +172,12 @@ function drawFront(ctx: CanvasRenderingContext2D): void {
   post(ctx, HALF_W, -HALF_L, BACK_H);
 }
 
-function layer(draw: (ctx: CanvasRenderingContext2D) => void, dpr: number): HTMLCanvasElement {
+function layer(draw: (ctx: CanvasRenderingContext2D) => void, k: number): HTMLCanvasElement {
   const c = document.createElement('canvas');
-  c.width = W * dpr;
-  c.height = H * dpr;
+  c.width = Math.round(W * k);
+  c.height = Math.round(H * k);
   const ctx = c.getContext('2d')!;
-  ctx.scale(dpr, dpr);
+  ctx.scale(k, k);
   draw(ctx);
   return c;
 }
@@ -186,8 +188,10 @@ function chargeColor(charge: number, serve: boolean): string {
   return charge < 0.5 ? '#ffffff' : charge < 0.9 ? '#ffd23a' : '#ff8a3a';
 }
 
-function bubble(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, alpha: number): void {
+function bubble(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, alpha: number, z: number): void {
   ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(z, z);
   ctx.globalAlpha = alpha;
   ctx.font = '700 17px system-ui, "Segoe UI Emoji", sans-serif';
   ctx.textAlign = 'center';
@@ -195,17 +199,18 @@ function bubble(ctx: CanvasRenderingContext2D, text: string, x: number, y: numbe
   const w = ctx.measureText(text).width + 22;
   ctx.fillStyle = '#ffffff';
   ctx.beginPath();
-  ctx.roundRect(x - w / 2, y - 30, w, 28, 10);
-  ctx.moveTo(x - 6, y - 3);
-  ctx.lineTo(x, y + 5);
-  ctx.lineTo(x + 6, y - 3);
+  ctx.roundRect(-w / 2, -30, w, 28, 10);
+  ctx.moveTo(-6, -3);
+  ctx.lineTo(0, 5);
+  ctx.lineTo(6, -3);
   ctx.fill();
   ctx.fillStyle = '#141a26';
-  ctx.fillText(text, x, y - 16);
+  ctx.fillText(text, 0, -16);
   ctx.restore();
 }
 
-function drawPlayer(ctx: CanvasRenderingContext2D, p: ViewPlayer, flip: boolean, me: boolean): void {
+// z is how much larger the name and the emote are drawn.
+function drawPlayer(ctx: CanvasRenderingContext2D, p: ViewPlayer, flip: boolean, me: boolean, z: number): void {
   const foot = proj(p.x, p.y, 0, flip);
   const s = foot.s;
   const w = 0.44 * s;
@@ -276,27 +281,27 @@ function drawPlayer(ctx: CanvasRenderingContext2D, p: ViewPlayer, flip: boolean,
     label = proj(p.x, p.y, diving ? 1.5 : 2.05, flip);
   }
 
-  const size = Math.round(Math.max(12, Math.min(18, 0.3 * s)));
+  const size = Math.round(Math.max(12, Math.min(18, 0.3 * s)) * z);
   ctx.font = `600 ${size}px system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 3 * z;
   ctx.strokeStyle = 'rgba(5, 8, 14, 0.8)';
   ctx.strokeText(p.name, label.x, label.y);
   ctx.fillStyle = me ? '#ffffff' : 'rgba(235, 240, 250, 0.85)';
   ctx.fillText(p.name, label.x, label.y);
-  let top = label.y - size - 4;
+  let top = label.y - size - 4 * z;
   if (me) {
     ctx.fillStyle = '#ffe14d';
     ctx.beginPath();
-    ctx.moveTo(label.x - 7, top - 8);
-    ctx.lineTo(label.x + 7, top - 8);
+    ctx.moveTo(label.x - 7 * z, top - 8 * z);
+    ctx.lineTo(label.x + 7 * z, top - 8 * z);
     ctx.lineTo(label.x, top);
     ctx.closePath();
     ctx.fill();
-    top -= 12;
+    top -= 12 * z;
   }
-  if (p.em) bubble(ctx, EMOTES[p.em - 1], label.x, top, Math.min(1, p.et / 0.3));
+  if (p.em) bubble(ctx, EMOTES[p.em - 1], label.x, top, Math.min(1, p.et / 0.3), z);
 }
 
 function shadow(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, alpha: number, flip: boolean): void {
@@ -313,7 +318,8 @@ const teamLabel = (v: View, t: Team) =>
     .map((p) => p.name)
     .join(' & ') || TEAM_NAME[t];
 
-function drawScore(ctx: CanvasRenderingContext2D, v: View): void {
+// Returns where its box ends on the right.
+function drawScore(ctx: CanvasRenderingContext2D, v: View): number {
   const x = 22;
   const y = 22;
   const sets = v.format.startsWith('s');
@@ -364,26 +370,35 @@ function drawScore(ctx: CanvasRenderingContext2D, v: View): void {
   if (done.length) ctx.fillText('SETS', x + w - 112 - ((done.length + 1) * 30) / 2, y + 10);
   ctx.textAlign = 'left';
   ctx.fillText(FORMATS[v.format].label + (v.tiebreak ? ' · Tie-break' : ''), x + 12, y + 102);
+  return x + w;
 }
 
-function banner(ctx: CanvasRenderingContext2D, title: string, sub: string, color: string): void {
+// A message at the top, in the middle: up to z times larger, but no more than 1.2, so it leaves the
+// far players' names in sight, and smaller if need be to keep clear of the score, whose box ends at
+// left.
+function banner(ctx: CanvasRenderingContext2D, title: string, sub: string, color: string, z: number, left: number): void {
+  ctx.save();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = '500 17px system-ui, sans-serif';
   const subW = sub ? ctx.measureText(sub).width : 0;
   ctx.font = '800 32px system-ui, sans-serif';
   const w = Math.max(ctx.measureText(title).width, subW, 260) + 60;
+  const k = Math.max(0.75, Math.min(z, 1.2, (W / 2 - left - 12) / (w / 2)));
+  ctx.translate(W / 2, 0);
+  ctx.scale(k, k);
   ctx.fillStyle = 'rgba(8, 12, 22, 0.78)';
   ctx.beginPath();
-  ctx.roundRect(W / 2 - w / 2, 16, w, sub ? 82 : 60, 14);
+  ctx.roundRect(-w / 2, 16, w, sub ? 82 : 60, 14);
   ctx.fill();
   ctx.fillStyle = color;
-  ctx.fillText(title, W / 2, 46);
+  ctx.fillText(title, 0, 46);
   if (sub) {
     ctx.font = '500 17px system-ui, sans-serif';
     ctx.fillStyle = '#c9d4e5';
-    ctx.fillText(sub, W / 2, 80);
+    ctx.fillText(sub, 0, 80);
   }
+  ctx.restore();
 }
 
 // What only the viewer sees about their own player.
@@ -400,6 +415,7 @@ export interface DrawOpts {
   me: string | null;
   hud: boolean;
   overlay?: Overlay;
+  touch?: boolean; // they play on a touch screen: the help names its buttons
 }
 
 interface Floater {
@@ -414,10 +430,13 @@ const tagColor = (tag: string) =>
   tag === 'Perfect!' ? '#e5ff3a' : tag.startsWith('Smash') || tag.startsWith('Por') ? '#ff6a5a' : tag === 'Frame!' ? '#ffb27a' : '#ffffff';
 
 export class Renderer {
-  private back: HTMLCanvasElement;
-  private net: HTMLCanvasElement;
-  private front: HTMLCanvasElement;
+  private canvas: HTMLCanvasElement;
+  private back!: HTMLCanvasElement;
+  private net!: HTMLCanvasElement;
+  private front!: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
+  private size = '';
+  private zoom = 1; // how much larger the HUD and the names are drawn, to stay readable on a small screen
   private trail: { x: number; y: number; z: number; t: number }[] = [];
   private marks: { x: number; y: number; t: number }[] = [];
   private floaters: Floater[] = [];
@@ -425,14 +444,29 @@ export class Renderer {
   private seenShot = -1;
 
   constructor(canvas: HTMLCanvasElement) {
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    canvas.width = W * dpr;
-    canvas.height = H * dpr;
+    this.canvas = canvas;
     this.ctx = canvas.getContext('2d')!;
-    this.ctx.scale(dpr, dpr);
-    this.back = layer(drawBack, dpr);
-    this.net = layer(drawNet, dpr);
-    this.front = layer(drawFront, dpr);
+    this.fit();
+  }
+
+  // Fits the frame to the canvas's size on the page, as it is now (a phone turns, a window
+  // resizes), with as many pixels as the screen has there, up to twice the frame's.
+  private fit(): void {
+    const cw = this.canvas.clientWidth || W;
+    const ch = this.canvas.clientHeight || H;
+    const dpr = window.devicePixelRatio || 1;
+    const size = `${cw} ${ch} ${dpr}`;
+    if (size === this.size) return;
+    this.size = size;
+    W = Math.round(H * Math.max(1.6, cw / ch));
+    const k = Math.min(2, (ch * dpr) / H);
+    this.canvas.width = Math.round(W * k);
+    this.canvas.height = Math.round(H * k);
+    this.ctx.setTransform(k, 0, 0, k, 0, 0);
+    this.back = layer(drawBack, k);
+    this.net = layer(drawNet, k);
+    this.front = layer(drawFront, k);
+    this.zoom = Math.min(1.45, Math.max(1, 540 / ch));
   }
 
   // Bounce marks and shot speeds come from counters in the view: a new number is a new one.
@@ -458,7 +492,9 @@ export class Renderer {
   }
 
   draw(v: View, o: DrawOpts, now = performance.now()): void {
+    this.fit();
     const ctx = this.ctx;
+    const z = this.zoom;
     const flip = o.viewTeam === 1;
     this.remember(v, now);
     ctx.drawImage(this.back, 0, 0, W, H);
@@ -511,7 +547,7 @@ export class Renderer {
     const depth = (y: number) => (flip ? -y : y);
     const items: { d: number; draw: () => void }[] = [
       { d: 0, draw: () => ctx.drawImage(this.net, 0, 0, W, H) },
-      ...v.players.map((p) => ({ d: depth(p.y), draw: () => drawPlayer(ctx, p, flip, p.id === o.me) })),
+      ...v.players.map((p) => ({ d: depth(p.y), draw: () => drawPlayer(ctx, p, flip, p.id === o.me, z) })),
       { d: depth(b.y), draw: () => this.drawBall(v, flip, now) },
     ];
     items.sort((a, c) => c.d - a.d).forEach((i) => i.draw());
@@ -529,14 +565,14 @@ export class Renderer {
       ctx.strokeStyle = 'rgba(5, 8, 14, 0.85)';
       let y = p.y;
       if (f.tag) {
-        ctx.font = '800 20px system-ui, sans-serif';
+        ctx.font = `800 ${Math.round(20 * z)}px system-ui, sans-serif`;
         ctx.strokeText(f.tag, p.x, y);
         ctx.fillStyle = tagColor(f.tag);
         ctx.fillText(f.tag, p.x, y);
-        y += 17;
+        y += 17 * z;
       }
       if (f.kmh > 0) {
-        ctx.font = '600 14px system-ui, sans-serif';
+        ctx.font = `600 ${Math.round(14 * z)}px system-ui, sans-serif`;
         const t = `${f.kmh} km/h`;
         ctx.strokeText(t, p.x, y);
         ctx.fillStyle = '#c9d4e5';
@@ -547,19 +583,22 @@ export class Renderer {
 
     if (!o.hud) return;
     if (ov?.serve && me) this.powerBar(me, ov.charge, flip);
-    drawScore(ctx, v);
+    ctx.save();
+    ctx.scale(z, z);
+    const score = drawScore(ctx, v) * z;
+    ctx.restore();
     if (v.phase === 'point') {
       if (v.pointWinner === null) {
         const [title, sub] = v.message.split(': ');
-        banner(ctx, title, sub ?? '', '#ffe14d');
-      } else banner(ctx, `Point ${teamLabel(v, v.pointWinner)}`, v.message, TEAM_COLOR[v.pointWinner]);
+        banner(ctx, title, sub ?? '', '#ffe14d', z, score);
+      } else banner(ctx, `Point ${teamLabel(v, v.pointWinner)}`, v.message, TEAM_COLOR[v.pointWinner], z, score);
     } else if (v.phase === 'serve') {
       const mine = v.serverId === o.me;
       const left = Math.ceil(AUTO_SERVE - v.timer);
       if (mine) {
-        const how = left <= 3 ? `Serving by itself in ${left}…` : 'A/D walk · hold Space for power (E: slice) · arrows aim · let go';
-        banner(ctx, v.message ? `Your serve · ${v.message}` : 'Your serve', how, '#ffffff');
-      } else if (v.message) banner(ctx, v.message, '', '#ffe14d');
+        const keys = o.touch ? 'Hold Hit for power (Lob: slice) · slide to aim · let go' : 'A/D walk · hold Space for power (E: slice) · arrows aim · let go';
+        banner(ctx, v.message ? `Your serve · ${v.message}` : 'Your serve', left <= 3 ? `Serving by itself in ${left}…` : keys, '#ffffff', z, score);
+      } else if (v.message) banner(ctx, v.message, '', '#ffe14d', z, score);
     }
   }
 
@@ -600,8 +639,11 @@ export class Renderer {
     const head = proj(me.x, me.y, 1.7, flip);
     const foot = proj(me.x, me.y, 0, flip);
     const h = 96;
-    const x = foot.x + 0.75 * foot.s;
-    const y = head.y - 10;
+    const x = 0;
+    const y = 0;
+    ctx.save();
+    ctx.translate(foot.x + 0.75 * foot.s, head.y - 10);
+    ctx.scale(this.zoom, this.zoom);
     ctx.fillStyle = 'rgba(8, 12, 22, 0.8)';
     ctx.beginPath();
     ctx.roundRect(x - 3, y - 3, 20, h + 6, 6);
@@ -619,5 +661,6 @@ export class Renderer {
     ctx.textAlign = 'center';
     ctx.fillStyle = '#c9d4e5';
     ctx.fillText('POWER', x + 7, y + h + 16);
+    ctx.restore();
   }
 }
