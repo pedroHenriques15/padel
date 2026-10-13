@@ -264,6 +264,24 @@ test('holding the hit key: the swing comes by itself, and the longer the charge 
   assert.ok(full.shot.kmh > 70, `${full.shot.kmh} km/h`);
 });
 
+test('charging plants the feet: the arrows aim and do not move; after the swing they move again', () => {
+  const s = humanMatch(0, 9);
+  serveWith(s, 0);
+  const a = s.players[0];
+  Object.assign(a, { x: 0, y: -6, vx: 0, vy: 0, cooldown: 0 });
+  step(s, { a: keys({ ix: -1, press: true, hold: true }) });
+  for (let i = 0; i < 30; i++) step(s, { a: keys({ ix: -1, hold: true }) });
+  assert.ok(Math.abs(a.x) < 0.05 && Math.abs(a.y + 6) < 0.05, `moved to ${a.x.toFixed(2)}, ${a.y.toFixed(2)}`);
+  assert.equal(a.aimIx, -1, 'the arrow aims');
+  incoming(s);
+  a.charge = 0.5;
+  const before = s.shot.n;
+  run(s, (s) => s.shot.n > before, () => ({ a: keys({ ix: -1, hold: true }) }), 3);
+  const x = a.x;
+  for (let i = 0; i < 30; i++) step(s, { a: keys({ ix: -1, hold: true }) });
+  assert.ok(a.x < x - 0.5, 'free to move once the swing came, the key still down');
+});
+
 test('the arrows at contact aim the shot: ←/→ the side, ↑/↓ deep or short', () => {
   const landing = (ix: number, iy: number) => {
     const xs: number[] = [];

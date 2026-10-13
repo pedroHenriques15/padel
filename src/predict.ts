@@ -14,7 +14,8 @@ export class Me {
   aim = { x: 0, y: 0 }; // where they aim their serve
   private placeAt = 0; // when, on this clock, the latest serve was set up
   private dives = 0;
-  private charging: { kind: SwingKind; at: number } | null = null;
+  private charging: { kind: SwingKind; at: number; seen: boolean } | null = null;
+  private spent = 0; // the press whose swing the host has made
   private serving = false;
 
   // v is the newest view from the host; held, the kind of key held since its press at pressedAt.
@@ -30,17 +31,26 @@ export class Me {
       this.dives = c.d;
     }
     this.serving = v.phase === 'serve' && v.serverId === id;
-    if (!held) this.charging = null;
+    if (!held || pressedAt <= this.spent) this.charging = null;
     else if (!this.charging || this.charging.at < pressedAt) {
       // A serve can't start before its wait is over; a key held through it starts it then.
       const at = this.serving ? Math.max(pressedAt, this.placeAt + C.SERVE_DELAY * 1000) : pressedAt;
-      this.charging = { kind: held, at };
+      this.charging = { kind: held, at, seen: false };
       if (this.serving) this.aim = defaultServeAim(v.boxSign, R);
+    }
+    // Once the host has swung (or served), the charge is over though the key is still down, as it
+    // is on the host: the player can move again.
+    if (this.charging) {
+      if (p.charge >= 0) this.charging.seen = true;
+      else if (this.charging.seen || now - pressedAt > 1200) {
+        this.spent = pressedAt;
+        this.charging = null;
+      }
     }
     const dive = c.d > this.dives;
     this.dives = c.d;
     const charging = !!this.charging && now >= this.charging.at;
-    moveBody(this.body, c.ix, c.iy, dive, { team: p.team, serveSide: this.serving ? v.serveSide : 0, frozen: this.serving && charging, slow: charging, speed: p.speed }, dt);
+    moveBody(this.body, c.ix, c.iy, dive, { team: p.team, serveSide: this.serving ? v.serveSide : 0, frozen: charging, speed: p.speed }, dt);
     if (this.serving && charging) {
       this.aim = clampServeAim(
         this.aim.x + c.ix * rightX(p.team) * C.AIM_SPEED * dt,

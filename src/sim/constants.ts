@@ -29,7 +29,6 @@ export const LATE = 0.25; // s after the ball passed that a swing still reaches 
 export const COOLDOWN = 0.4; // s between swings
 
 export const CHARGE_FULL = 0.75; // s holding the hit key to a full-power shot
-export const CHARGE_SLOW = 0.15; // how much of their speed a player keeps while charging: they plant their feet
 
 export const SERVE_DELAY = 0.5; // s before the server may serve
 export const SERVE_FULL = 1; // s for the serve's power bar to fill

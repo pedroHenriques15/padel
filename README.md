@@ -16,7 +16,7 @@ A throwaway game: no server, no accounts, nothing to maintain.
 | Key | |
 |---|---|
 | WASD or arrows | Move. You always play up the screen. The ring round your feet lights up when the ball is in reach. |
-| Hold Space (or J) | Charge a shot: the longer, the harder. Let go to swing, or keep holding and you swing by yourself as the ball arrives. Charging plants your feet. A tap is the safe shot. |
+| Hold Space (or J) | Charge a shot: the longer, the harder. Let go to swing, or keep holding and you swing by yourself as the ball arrives. Charging plants your feet: you stop, and the arrows only aim. A tap is the safe shot. |
 | Arrows as you hit | Aim: ←/→ the side, ↑ deep, ↓ short; none, crosscourt. The target shows while you charge. |
 | K | Lob (hold it for a higher one) |
 | Shift or L | Dive towards the arrows, for a ball out of reach; you're down for a moment after |

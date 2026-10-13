@@ -222,7 +222,7 @@ function control(s: State, p: Player, inp: TickInput, dt: number): void {
   p.aimIy = inp.shotAim ? inp.shotAim[1] : Math.sign(inp.iy);
 
   const serving = s.phase === 'serve' && s.players[s.server] === p;
-  const limits: Limits = { team: p.team, serveSide: serving ? s.serveSide : 0, frozen: serving && p.charge >= 0, slow: p.charge >= 0, speed: p.speed };
+  const limits: Limits = { team: p.team, serveSide: serving ? s.serveSide : 0, frozen: p.charge >= 0, speed: p.speed };
   const wasDiving = p.dive > 0;
   moveBody(p, inp.ix, inp.iy, inp.dive, limits, dt);
   // A remote player moves on their own screen: where they say they are counts, once they have

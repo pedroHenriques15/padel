@@ -148,7 +148,7 @@ function howTo(): HTMLElement {
       {},
       h('li', {}, h('b', {}, 'Move'), ' WASD or the arrows. You always play up the screen. The ring round your feet lights up when the ball is in reach.'),
       h('li', {}, h('b', {}, 'Serve'), ' Walk along the baseline with ←/→, then hold Space: the power bar fills (the red top risks a fault) and the arrows move your target in the box. Let go to serve. K serves a slice, which stays low.'),
-      h('li', {}, h('b', {}, 'Hit'), ' Hold Space as the ball comes: the longer, the harder. Let go to swing, or keep holding and you swing by yourself as it arrives. Charging plants your feet. A quick tap is the safe shot; the closer the ball passes, the better.'),
+      h('li', {}, h('b', {}, 'Hit'), ' Hold Space as the ball comes: the longer, the harder. Let go to swing, or keep holding and you swing by yourself as it arrives. Charging plants your feet: you stop, and the arrows only aim, so get to the ball first. A quick tap is the safe shot; the closer the ball passes, the better.'),
       h('li', {}, h('b', {}, 'Aim'), ' The arrows as you hit: ←/→ the side, ↑ deep, ↓ short. With none, it goes crosscourt. Your target shows on the other side while you charge.'),
       h('li', {}, h('b', {}, 'Overheads'), ' A high ball: tap for a bandeja, charge for a smash; fully charged from near the net it bounces out of the court: por tres!'),
       h('li', {}, h('b', {}, 'Lob, dive, emotes'), ' K lobs (hold it for a higher one). Shift or L dives towards the arrows, for a ball out of reach. 1 to 4: Vamos!, 😂, Sorry!, 👏'),
@@ -380,10 +380,8 @@ function frame(now: number): void {
     session.sendControls(mine ? { ...keys.read(), ...me.pose() } : keys.read());
     v = session.view();
     if (v && raw && mine) {
-      // Their own figure moves at once; the charge shows from the press, until the host says the
-      // swing came.
-      const local = me.charge(now);
-      const charge = local >= 0 && (mine.charge >= 0 || now - keys.pressedAt < 350 || raw.phase === 'serve') ? local : -1;
+      // Their own figure moves at once, and their charge shows from the press.
+      const charge = me.charge(now);
       const dive = me.body.dive > 0 ? 1 : me.body.down > 0 ? 2 : 0;
       v.players = v.players.map((p) => (p.id === id ? { ...p, x: me.body.x, y: me.body.y, charge, dive } : p));
       ov = overlay(v, id, charge, me.kind() === 'lob');
